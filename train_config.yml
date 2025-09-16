@@ -1,0 +1,17 @@
+device: cuda
+paths:
+  data_dir: ./dataset/bending_signal_/
+  model_dir: ./trained_models/
+model: 
+  node_in_dim: 9
+  edge_in_dim: 7
+  node_out_dim: 3
+  hidden_size: 128
+  process_steps: 10
+training:
+  learning_rate: 1e-3
+  weight_decay: 1e-5
+  num_epochs: 20
+  percentage_train: 0.8
+  start_noise_level: 0.05
+  end_noise_level: 0.01
