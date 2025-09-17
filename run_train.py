@@ -57,8 +57,7 @@ if __name__ == "__main__":
             all_graphs.append(graph)
     # split into train and val
     percentage_train = 0.8
-    train_loader = DataLoader(all_graphs[:int(percentage_train*len(all_graphs))], batch_size=1, shuffle=True)
-    val_loader = DataLoader(all_graphs[int(percentage_train*len(all_graphs)):], batch_size=1, shuffle=False)
+    train_loader = DataLoader(all_graphs, batch_size=1, shuffle=True)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = EncodeProcessDecode(node_in_dim=node_in_dim,
                                 edge_in_dim=edge_in_dim,

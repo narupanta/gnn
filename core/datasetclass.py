@@ -44,18 +44,13 @@ class HydrogelDataset(Dataset):
         edge_index = cells_to_edge_index(cells)
         node_type = torch.tensor(sample["node_type"], dtype=torch.float32)
         u = torch.tensor(sample['u_time_series'], dtype=torch.float32)
+        # world_pos = mesh_pos + u
         phi = torch.tensor(sample["φ_time_series"], dtype=torch.float32).unsqueeze(-1)
         swell_phi = torch.tensor(sample["swell_time_series"], dtype=torch.float32)
+        # swell_phi_tensor = torch.zeros_like(phi)
+        # swell_nodes = node_type[:, :, 4] == 1
+        # swell_phi_tensor[:, swell_nodes , :] = swell_phi
         time = torch.tensor(sample["t"], dtype=torch.float32)
-
-        #filter by time >= 60.0 s
-        filter_time_at = 0.0
-        time_mask = time >= filter_time_at
-        time = time[time_mask] - filter_time_at
-        u = u[time_mask, :, :]
-        phi = phi[time_mask, :, :]
-        swell_phi = swell_phi[time_mask]
-
         #create input features as [u, phi, node_type]
         #create target as [target_u, target_phi] where target is next time step
         row, col = edge_index
@@ -74,7 +69,7 @@ class HydrogelDataset(Dataset):
             uy_dbc = node_type[:, 2] == 1
             u_noise[:, ux_dbc, 0] = 0.0 # no noise on fixed nodes
             u_noise[:, uy_dbc, 1] = 0.0 # no noise on fixed nodes
-            u_noise = u_noise + u_noise
+            u_curr = u_curr + u_noise
             # phi_curr noise defined by range of phi
             phi_range = torch.max(phi) - torch.min(phi)
             phi_noise = torch.randn_like(phi_curr) * self.noise_level * phi_range
