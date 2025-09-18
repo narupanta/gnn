@@ -37,57 +37,6 @@ def MLP(in_dim, out_dim, hidden_dims=(128, 128), activate_final=False, layer_nor
         layers.append(nn.LayerNorm(out_dim))
     return nn.Sequential(*layers)
 
-class GraphNetBlock(MessagePassing):
-    """Message passing."""
-    
-    def __init__(self,latent_size, in_size1, in_size2): 
-        super(GraphNetBlock, self).__init__(aggr='add')        
-        self._latent_size = latent_size
-        
-        # First net (MLP): eij' = f1(xi, xj, eij)
-        self.edge_net = Sequential(Linear(in_size1,self._latent_size),
-                                   ReLU(),
-                                   Linear(self._latent_size,self._latent_size),
-                                   ReLU(),
-                                   LayerNorm(self._latent_size))        
-        
-        # Second net (MLP): xi' = f2(xi, sum(eij'))
-        self.node_net = Sequential(Linear(in_size2,self._latent_size),
-                                   ReLU(),
-                                   Linear(self._latent_size,self._latent_size),
-                                   ReLU(),
-                                   LayerNorm(self._latent_size))       
-        
-    def forward(self, graph):
-        
-        edge_index = graph.edge_index        
-        x = graph.x
-        edge_features = graph.edge_attr
-        
-        # Node update
-        new_node_features = self.propagate(edge_index, x= x, edge_attr = edge_features)        
-        
-        # Edge update
-        row, col = edge_index
-        new_edge_features = self.edge_net(torch.cat([x[row], x[col], edge_features], dim=-1))
-        
-        # Add residuals
-        new_node_features = new_node_features + graph.x
-        new_edge_features = new_edge_features + graph.edge_attr       
-                
-        return Data(edge_index = edge_index, x = new_node_features, edge_attr = new_edge_features)        
-    
-    def message(self, x_i, x_j, edge_attr):            
-        features = torch.cat([x_i, x_j, edge_attr], dim=-1)        
-        
-        return self.edge_net(features)
-    
-    def update(self, aggr_out, x):
-        # aggr_out has shape [num_nodes, out_channels]        
-        tmp = torch.cat([aggr_out, x], dim=-1)                
-       
-        # Step 5: Return new node embeddings.        
-        return self.node_net(tmp)
 class EdgeNodeMessagePassing(MessagePassing):
     """Custom MP layer that:
       1) updates edge attributes using (x_i, x_j, e_ij)
@@ -97,8 +46,11 @@ class EdgeNodeMessagePassing(MessagePassing):
     This follows the Encode-Process-Decode pattern where the processing layer is a message-passing step.
     """
 
-    def __init__(self, hidden_dim):
+    def __init__(self, hidden_dim, attention):
         super().__init__(aggr='add')  # 'add' aggregation
+        self.attention = attention
+        # Node attention: compute attention scores for neighbors
+        self.attn_lin = torch.nn.Linear(hidden_dim, hidden_dim)
         # edge update: (x_i, x_j, e_ij) -> e'_ij
         self.edge_mlp = MLP(hidden_dim * 2 + hidden_dim, hidden_dim, hidden_dims=(hidden_dim,), layer_norm=True)
         # node update: (x_i, aggregated_message) -> x'_i
@@ -118,11 +70,19 @@ class EdgeNodeMessagePassing(MessagePassing):
                 
         return new_node_features, new_edge_features
     
-    def message(self, x_i, x_j, edge_attr):            
-        features = torch.cat([x_i, x_j, edge_attr], dim=-1)        
-        
-        return self.edge_mlp(features)
-    
+    def message(self, x_i, x_j, edge_attr):
+        # Compute attention score
+        if self.attention :
+            alpha = (self.attn_lin(x_i) * self.attn_lin(x_j)).sum(dim=-1, keepdim=True)
+            alpha = F.leaky_relu(alpha)
+            alpha = torch.softmax(alpha, dim=0)  # softmax over neighbors
+
+            # Message is neighbor feature weighted by attention
+            msg = alpha * self.edge_mlp(torch.cat([x_i, x_j, edge_attr], dim=-1))
+        else :
+            features = torch.cat([x_i, x_j, edge_attr], dim=-1)        
+            msg = self.edge_mlp(features)
+        return msg
     def update(self, aggr_out, x):
         # aggr_out has shape [num_nodes, out_channels]        
         tmp = torch.cat([aggr_out, x], dim=-1)                
@@ -137,15 +97,16 @@ class EncodeProcessDecode(nn.Module):
                  hidden_size=128,
                  process_steps=3,
                  node_out_dim=0, 
+                 attention=False,
                  device = "cpu"):
         super().__init__()
         # Encoders
         self.node_encoder = MLP(node_in_dim, hidden_size, hidden_dims=(hidden_size,), layer_norm=True)
         self.edge_encoder = MLP(edge_in_dim, hidden_size, hidden_dims=(hidden_size,), layer_norm=True)
-
+        self.attention = attention
         # Processor: stack of message passing steps
         self.process_steps = process_steps
-        self.processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size)
+        self.processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size, attention)
                                          for _ in range(process_steps)])
 
         # Decoder MLPs

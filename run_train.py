@@ -19,6 +19,21 @@ def noise_schedule(epoch, total_epochs, initial_noise=0.1, final_noise=0.01):
         return final_noise
     return initial_noise + (final_noise - initial_noise) * (epoch / total_epochs)
 
+def log_model_parameters(model):
+    total_params = 0
+    total_trainable = 0
+
+    logger.info("===== Model Parameters =====")
+    for name, param in model.named_parameters():
+        num_params = param.numel()
+        total_params += num_params
+        if param.requires_grad:
+            total_trainable += num_params
+        logger.info(f"{name}: {param.size()} | params={num_params} | requires_grad={param.requires_grad}")
+
+    logger.info(f"Total parameters: {total_params}")
+    logger.info(f"Trainable parameters: {total_trainable}")
+    logger.info("============================")
 
 if __name__ == "__main__":
     # read model and training parameters from config yml file if exists
@@ -32,6 +47,7 @@ if __name__ == "__main__":
         hidden_size = config["model"]["hidden_size"]
         process_steps = config["model"]["process_steps"]
         node_out_dim = config["model"]["node_out_dim"]
+        attention = config["model"]["attention"]
 
         learning_rate = float(config["training"]["learning_rate"])
         weight_decay = float(config["training"].get("weight_decay", 1e-5))
@@ -97,9 +113,12 @@ if __name__ == "__main__":
         hidden_size=hidden_size,
         process_steps=process_steps,
         node_out_dim=node_out_dim,
+        attention=attention,
         device=device
     ).to(device)
-
+    # --- Example usage ---
+    # Suppose `model` is your PyTorch model
+    log_model_parameters(model)
     # Optimizer
     optimizer = torch.optim.Adam(
         model.parameters(),
