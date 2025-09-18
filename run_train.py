@@ -4,18 +4,23 @@ import torch.optim as optim
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from core.datasetclass import HydrogelDataset
-from core.model import EncodeProcessDecode   
+from core.meshgraphnet import EncodeProcessDecode   
+from core.rollout import rollout
+from tqdm import tqdm
+import os
+import yaml
+from datetime import datetime
+import logging
+
+
 def noise_schedule(epoch, total_epochs, initial_noise=0.1, final_noise=0.01):
     """Linear noise schedule from initial_noise to final_noise over total_epochs."""
     if epoch >= total_epochs:
         return final_noise
     return initial_noise + (final_noise - initial_noise) * (epoch / total_epochs)
 
-if __name__ == "__main__":
-    import os
-    from datetime import datetime
-    import argparse, yaml
 
+if __name__ == "__main__":
     # read model and training parameters from config yml file if exists
     config_path = "train_config.yml"
     if os.path.exists(config_path):
@@ -36,6 +41,7 @@ if __name__ == "__main__":
         end_noise = config["training"].get("end_noise", 0.01)
         save_model_dir = config["paths"].get("save_model_dir", './trained_models')
         data_dir = config["paths"]["data_dir"]
+
         # save the config file in model_dir for future reference
         now = datetime.now()
         dt_string = now.strftime("%Y%m%dT%H%M%S")
@@ -45,25 +51,55 @@ if __name__ == "__main__":
         with open(os.path.join(model_dir, 'config.yml'), 'w') as f:
             yaml.dump(config, f)
 
+    # --- Setup logging ---
+    log_file = os.path.join(model_dir, "log.txt")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger("train")
 
-    dataset = HydrogelDataset(data_dir = data_dir, noise_level=noise_schedule(0, num_epochs, initial_noise=start_noise, final_noise=end_noise))
+    dataset = HydrogelDataset(
+        data_dir=data_dir,
+        noise_level=noise_schedule(0, num_epochs, initial_noise=start_noise, final_noise=end_noise)
+    )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
-    
+    rollout_dataset = HydrogelDataset(data_dir=data_dir, noise_level=0.0)
+
     # split trajectory into frames
     all_graphs = []
     for data in dataloader:
-        for t in range(data.x.shape[0]):
-            graph = Data(x=data.x[t], y=data.y[t], edge_index=data.edge_index, edge_attr=data.edge_attr[t], pos=data.pos, time=data.time[t], swelling_phi=data.swelling_phi[t], cells=data.cells)
+        for t in range(data.world_pos.shape[0]):
+            graph = Data(
+                world_pos=data.world_pos[t],
+                phi=data.phi[t],
+                node_type=data.node_type,
+                target=data.target[t],
+                edge_index=data.edge_index,
+                mesh_pos=data.mesh_pos,
+                time=data.time[t],
+                swelling_phi=data.swelling_phi[t],
+                swelling_phi_rate = data.swelling_phi_rate[t],
+                cells=data.cells,
+            )
             all_graphs.append(graph)
-    # split into train and val
-    percentage_train = 0.8
+
     train_loader = DataLoader(all_graphs, batch_size=1, shuffle=True)
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = EncodeProcessDecode(node_in_dim=node_in_dim,
-                                edge_in_dim=edge_in_dim,
-                                hidden_size=hidden_size,
-                                process_steps=process_steps,
-                                node_out_dim=node_out_dim).to(device)
+    model = EncodeProcessDecode(
+        node_in_dim=node_in_dim,
+        edge_in_dim=edge_in_dim,
+        hidden_size=hidden_size,
+        process_steps=process_steps,
+        node_out_dim=node_out_dim,
+        device=device
+    ).to(device)
+
     # Optimizer
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -82,7 +118,8 @@ if __name__ == "__main__":
     for train_epoch in range(num_epochs):
         model.train()
         total_loss, total_loss_ux, total_loss_uy, total_loss_phi = 0.0, 0.0, 0.0, 0.0
-        for batch in train_loader:
+        loop = tqdm(train_loader, leave=False)
+        for batch in loop:
             batch = batch.to(device)
             optimizer.zero_grad()
             loss, loss_ux, loss_uy, loss_phi = model.loss(batch)
@@ -92,50 +129,69 @@ if __name__ == "__main__":
             total_loss_ux += loss_ux.item()
             total_loss_uy += loss_uy.item()
             total_loss_phi += loss_phi.item()
+            loop.set_description(f"Epoch {train_epoch + 1}: ")
+            loop.set_postfix({
+                "Loss": f"{loss.item():.4f}",
+                "loss_x": f"{loss_ux.item():.4f}",
+                "loss_y": f"{loss_uy.item():.4f}",
+                "loss_phi": f"{loss_phi.item():.4f}"
+            })
+
         avg_loss = total_loss / len(train_loader)
         avg_loss_ux = total_loss_ux / len(train_loader)
         avg_loss_uy = total_loss_uy / len(train_loader)
         avg_loss_phi = total_loss_phi / len(train_loader)
 
-        #print train loss and component loss
-        print(f"Epoch {train_epoch}, Train Loss: {avg_loss:.6f}, Ux Loss: {avg_loss_ux:.6f}, Uy Loss: {avg_loss_uy:.6f}, Phi Loss: {avg_loss_phi:.6f}")
+        # Log training loss
+        logger.info(
+            f"Epoch {train_epoch + 1}, "
+            f"Train Loss: {avg_loss:.6f}, "
+            f"Ux Loss: {avg_loss_ux:.6f}, "
+            f"Uy Loss: {avg_loss_uy:.6f}, "
+            f"Phi Loss: {avg_loss_phi:.6f}"
+        )
+
         scheduler.step()
         model.eval()
-        total_val_loss, total_val_loss_ux, total_val_loss_uy, total_val_loss_phi = 0.0, 0.0, 0.0, 0.0
+        total_rollout_loss = 0.0
+        total_rmse_x, total_rmse_y, total_rmse_phi = 0.0, 0.0, 0.0
+        num_rollouts = 0
         with torch.no_grad():
-            for batch in val_loader:
-                batch = batch.to(device)
-                loss, loss_ux, loss_uy, loss_phi = model.loss(batch)
-                total_val_loss += loss.item()
-                total_val_loss_ux += loss_ux.item()
-                total_val_loss_uy += loss_uy.item()
-                total_val_loss_phi += loss_phi.item()
-        avg_val_loss = total_val_loss / len(val_loader)
-        avg_val_loss_ux = total_val_loss_ux / len(val_loader)
-        avg_val_loss_uy = total_val_loss_uy / len(val_loader)
-        avg_val_loss_phi = total_val_loss_phi / len(val_loader)
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            # save model in subdirectory of model_dir as best_model
-            best_model_dir = os.path.join(model_dir, "best_model")
-            if not os.path.exists(best_model_dir):
-                os.makedirs(best_model_dir)
-            torch.save(model.state_dict(), os.path.join(best_model_dir, "model_params.pth"))
-            torch.save(optimizer.state_dict(), os.path.join(best_model_dir, "optimizer_params.pth"))
-            torch.save(scheduler.state_dict(), os.path.join(best_model_dir, "scheduler_params.pth"))
-        #save model every 20 epochs in model_dir
-        if train_epoch % 20 == 0:
-            # save model in subdirectory of model_dir as epoch_{train_epoch}
-            epoch_model_dir = os.path.join(model_dir, "epoch_model")
-            if not os.path.exists(epoch_model_dir):
-                os.makedirs(epoch_model_dir)
-            torch.save(model.state_dict(), os.path.join(epoch_model_dir, f"model_epoch_{train_epoch}.pth"))
-            torch.save(optimizer.state_dict(), os.path.join(epoch_model_dir, f"optimizer_epoch_{train_epoch}.pth"))
-            torch.save(scheduler.state_dict(), os.path.join(epoch_model_dir, f"scheduler_epoch_{train_epoch}.pth"))
-        
-        #print val loss and component loss
-        print(f"Epoch {train_epoch}, Val Loss: {avg_val_loss:.6f}, Ux Loss: {avg_val_loss_ux:.6f}, Uy Loss: {avg_val_loss_uy:.6f}, Phi Loss: {avg_val_loss_phi:.6f}")
+            for trajectory in rollout_dataset:
+                rollout_result = rollout(model, trajectory)
+                rmse_x, rmse_y, rmse_phi = (
+                    rollout_result["rmse_x"],
+                    rollout_result["rmse_y"],
+                    rollout_result["rmse_phi"],
+                )
+                rollout_loss = rmse_x + rmse_y + rmse_phi
+                total_rollout_loss += rollout_loss
+                total_rmse_x += rmse_x
+                total_rmse_y += rmse_y
+                total_rmse_phi += rmse_phi
+                num_rollouts += 1
 
-        #log training and val loss to a file in model_dir
-        with open(os.path.join(model_dir, "training_log.txt"), "a") as f:
-            f.write(f"Epoch {train_epoch}, Train Loss: {avg_loss:.6f}, Ux Loss: {avg_loss_ux:.6f}, Uy Loss: {avg_loss_uy:.6f}, Phi Loss: {avg_loss_phi:.6f}, Val Loss: {avg_val_loss:.6f}, Ux Val Loss: {avg_val_loss_ux:.6f}, Uy Val Loss: {avg_val_loss_uy:.6f}, Phi Val Loss: {avg_val_loss_phi:.6f}\n")
+        avg_rollout_loss = total_rollout_loss / max(1, num_rollouts)
+        avg_rmse_x = total_rmse_x / max(1, num_rollouts)
+        avg_rmse_y = total_rmse_y / max(1, num_rollouts)
+        avg_rmse_phi = total_rmse_phi / max(1, num_rollouts)
+
+        logger.info(
+            f"Rollout Loss: {avg_rollout_loss:.6f}, "
+            f"RMSE_x: {avg_rmse_x:.6f}, "
+            f"RMSE_y: {avg_rmse_y:.6f}, "
+            f"RMSE_phi: {avg_rmse_phi:.6f}"
+        )
+
+        # Save best model
+        if avg_rollout_loss < best_val_loss:
+            best_val_loss = avg_rollout_loss
+            best_model_dir = os.path.join(model_dir, "best_model")
+            os.makedirs(best_model_dir, exist_ok=True)
+            model.save_model(best_model_dir)
+
+        # Save checkpoint every 20 epochs
+        if (train_epoch + 1) % 20 == 0:
+            epoch_model_dir = os.path.join(model_dir, f"epoch_{train_epoch+1}")
+            os.makedirs(epoch_model_dir, exist_ok=True)
+            model.save_model(epoch_model_dir)
