@@ -23,6 +23,20 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from .normalization import Normalizer
 import os
+def sinusoidal_time_embedding(t, dim=16):
+    """
+    Create a sinusoidal time embedding.
+    t: scalar tensor [1] or float
+    dim: embedding dimension (even number)
+    """
+    assert dim % 2 == 0, "Embedding dimension must be even"
+    device = t.device if isinstance(t, torch.Tensor) else 'cpu'
+
+    freqs = 2 ** torch.arange(dim // 2, dtype=torch.float32, device=device)
+    t = t.float()
+    emb = torch.cat([torch.sin(freqs * t), torch.cos(freqs * t)], dim=-1)
+    return emb  # shape [dim]
+
 def MLP(in_dim, out_dim, hidden_dims=(128, 128), activate_final=False, layer_norm=False):
     layers = []
     last = in_dim
@@ -50,7 +64,8 @@ class EdgeNodeMessagePassing(MessagePassing):
         super().__init__(aggr='add')  # 'add' aggregation
         self.attention = attention
         # Node attention: compute attention scores for neighbors
-        self.attn_lin = torch.nn.Linear(hidden_dim, hidden_dim)
+        if self.attention :
+            self.attn_lin = torch.nn.Linear(hidden_dim, hidden_dim)
         # edge update: (x_i, x_j, e_ij) -> e'_ij
         self.edge_mlp = MLP(hidden_dim * 2 + hidden_dim, hidden_dim, hidden_dims=(hidden_dim,), layer_norm=True)
         # node update: (x_i, aggregated_message) -> x'_i
@@ -137,12 +152,14 @@ class EncodeProcessDecode(nn.Module):
 
         return output
     def _build_node_features(self, graph) :
+        time_emb = sinusoidal_time_embedding(graph.time, dim = 4)
         u = graph.world_pos - graph.mesh_pos
         phi = graph.phi
         swell_phi = graph.swelling_phi
         swelling_phi_rate = graph.swelling_phi_rate
         node_type = graph.node_type
-        x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type], dim = -1)
+        time_emb = time_emb.unsqueeze(0).repeat(u.shape[0], 1)
+        x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb], dim = -1)
         return x
     def _build_edge_features(self, graph) :
         senders, receivers = graph.edge_index[0], graph.edge_index[1]

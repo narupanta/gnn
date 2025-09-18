@@ -19,7 +19,7 @@ def rollout(model, data) :
             #     print(f" Rollout step {t}/{len(graphs)}")
             #     # correct curr_graph to ground truth to avoid drift
             #     curr_graph = graphs[t-1].to(device)
-            #     # predict next state
+            # #     # predict next state
             curr_graph.time = graphs[t].time
             curr_graph.swelling_phi = graphs[t].swelling_phi
             curr_graph.swelling_phi_rate = graphs[t].swelling_phi_rate
@@ -42,6 +42,7 @@ def rollout(model, data) :
             "cells": data.cells,
             "node_type": data.node_type,
             "swell_phi": data.swelling_phi,
+            "swell_phi_rate": data.swelling_phi_rate,
             "rmse_x": rmse_x,
             "rmse_y": rmse_y,
             "rmse_phi": rmse_phi}  
