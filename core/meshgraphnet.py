@@ -36,17 +36,6 @@ def sinusoidal_time_embedding(t, dim=16):
     t = t.float()
     emb = torch.cat([torch.sin(freqs * t), torch.cos(freqs * t)], dim=-1)
     return emb  # shape [dim]
-
-class MatParamModulation(nn.Module):
-    def __init__(self, cond_dim, feature_dim):
-        super().__init__()
-        self.gamma = nn.Linear(cond_dim, feature_dim)
-        self.beta = nn.Linear(cond_dim, feature_dim)
-
-    def forward(self, x, cond):
-        gamma = self.gamma(cond)       # shape (F,)
-        beta = self.beta(cond)         # shape (F,)
-        return gamma * x + beta
     
 def MLP(in_dim, out_dim, hidden_dims=(128, 128), activate_final=False, layer_norm=False):
     layers = []
@@ -120,7 +109,6 @@ class EncodeProcessDecode(nn.Module):
     def __init__(self,
                  node_in_dim,
                  edge_in_dim,
-                 mat_param_dim,
                  hidden_size=128,
                  process_steps=3,
                  node_out_dim=0, 

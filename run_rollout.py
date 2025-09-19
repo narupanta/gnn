@@ -12,7 +12,7 @@ from core.rollout import rollout
 
 if __name__ == "__main__":
     # find config.yml in model directory
-    load_model_dir = "./trained_models/20250918T131220"
+    load_model_dir = "./trained_models/20250919T133846"
     save_rollout_dir = "./rollouts"
     config_path = os.path.join(load_model_dir, 'config.yml')
     if not os.path.exists(config_path):
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         hidden_size = config["model"]["hidden_size"]
         process_steps = config["model"]["process_steps"]
         node_out_dim = config["model"]["node_out_dim"]
-
+        attention = config["model"]["attention"]
         learning_rate = float(config["training"]["learning_rate"])
         weight_decay = float(config["training"].get("weight_decay", 1e-5))
         num_epochs = config["training"]["num_epochs"]
@@ -37,9 +37,11 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = EncodeProcessDecode(node_in_dim=node_in_dim,
                                 edge_in_dim=edge_in_dim,
+                                mat_param_dim=mat_param_dim,
                                 hidden_size=hidden_size,
                                 process_steps=process_steps,
                                 node_out_dim=node_out_dim,
+                                attention = attention,
                                 device = device).to(device)
     model_path = os.path.join(load_model_dir, 'best_model')
     model.load_model(model_path)
@@ -47,7 +49,6 @@ if __name__ == "__main__":
     
     dataset = HydrogelDataset(data_dir = data_dir, noise_level=0)
     
-
     # loop through all samples in the dataset
     for idx in range(len(dataset)):
         sample_name = dataset.get_name(idx)
@@ -56,13 +57,13 @@ if __name__ == "__main__":
         # input trajectory into rollout prediction
         trajectory_rollout = rollout(model, data)
         # save rollout predictions and error
-        save_rollout_dir = os.path.join(save_rollout_dir, sample_name)
-        os.makedirs(save_rollout_dir, exist_ok=True)
-        np.savez_compressed(os.path.join(save_rollout_dir, 'rollout.npz'),
+        os.makedirs(os.path.join(save_rollout_dir, sample_name), exist_ok=True)
+        np.savez_compressed(os.path.join(save_rollout_dir, sample_name, 'rollout.npz'),
                             time = trajectory_rollout["time"].detach().cpu().numpy(),
                             pred=trajectory_rollout["pred"].detach().cpu().numpy(),
                             gt=trajectory_rollout["gt"].detach().cpu().numpy(),
                             swell_phi = trajectory_rollout["swell_phi"].detach().cpu().numpy(),
+                            swell_phi_rate = trajectory_rollout["swell_phi_rate"].detach().cpu().numpy(),
                             node_type = trajectory_rollout["node_type"].detach().cpu().numpy(),
                             cells = trajectory_rollout["cells"].detach().cpu().numpy(),
                             mesh_pos = trajectory_rollout["mesh_pos"].detach().cpu().numpy())
