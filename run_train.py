@@ -44,6 +44,7 @@ if __name__ == "__main__":
         # override model and training parameters if specified in config file
         node_in_dim = config["model"]["node_in_dim"]
         edge_in_dim = config["model"]["edge_in_dim"]
+        mat_param_dim = config["model"]["mat_param_dim"]
         hidden_size = config["model"]["hidden_size"]
         process_steps = config["model"]["process_steps"]
         node_out_dim = config["model"]["node_out_dim"]
@@ -101,6 +102,7 @@ if __name__ == "__main__":
                 swelling_phi=data.swelling_phi[t],
                 swelling_phi_rate = data.swelling_phi_rate[t],
                 cells=data.cells,
+                mat_param=data.mat_param
             )
             all_graphs.append(graph)
 
@@ -110,6 +112,7 @@ if __name__ == "__main__":
     model = EncodeProcessDecode(
         node_in_dim=node_in_dim,
         edge_in_dim=edge_in_dim,
+        mat_param_dim=mat_param_dim,
         hidden_size=hidden_size,
         process_steps=process_steps,
         node_out_dim=node_out_dim,

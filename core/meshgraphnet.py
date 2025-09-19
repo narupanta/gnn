@@ -37,6 +37,17 @@ def sinusoidal_time_embedding(t, dim=16):
     emb = torch.cat([torch.sin(freqs * t), torch.cos(freqs * t)], dim=-1)
     return emb  # shape [dim]
 
+class MatParamModulation(nn.Module):
+    def __init__(self, cond_dim, feature_dim):
+        super().__init__()
+        self.gamma = nn.Linear(cond_dim, feature_dim)
+        self.beta = nn.Linear(cond_dim, feature_dim)
+
+    def forward(self, x, cond):
+        gamma = self.gamma(cond)       # shape (F,)
+        beta = self.beta(cond)         # shape (F,)
+        return gamma * x + beta
+    
 def MLP(in_dim, out_dim, hidden_dims=(128, 128), activate_final=False, layer_norm=False):
     layers = []
     last = in_dim
@@ -109,6 +120,7 @@ class EncodeProcessDecode(nn.Module):
     def __init__(self,
                  node_in_dim,
                  edge_in_dim,
+                 mat_param_dim,
                  hidden_size=128,
                  process_steps=3,
                  node_out_dim=0, 
@@ -159,7 +171,9 @@ class EncodeProcessDecode(nn.Module):
         swelling_phi_rate = graph.swelling_phi_rate
         node_type = graph.node_type
         time_emb = time_emb.unsqueeze(0).repeat(u.shape[0], 1)
-        x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb], dim = -1)
+        mat_param = graph.mat_param.unsqueeze(0).repeat(u.shape[0], 1)
+        # mat_param = _apply_film
+        x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb, mat_param], dim = -1)
         return x
     def _build_edge_features(self, graph) :
         senders, receivers = graph.edge_index[0], graph.edge_index[1]

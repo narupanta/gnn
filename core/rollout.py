@@ -7,7 +7,7 @@ def rollout(model, data) :
     # split trajectory into frames
     graphs = []
     for t in range(data.world_pos.shape[0]):
-        graph = Data(world_pos=data.world_pos[t], phi = data.phi[t], node_type = data.node_type, target=data.target[t], edge_index=data.edge_index, mesh_pos=data.mesh_pos, time=data.time[t], swelling_phi=data.swelling_phi[t], swelling_phi_rate = data.swelling_phi_rate[t], cells=data.cells)
+        graph = Data(world_pos=data.world_pos[t], phi = data.phi[t], node_type = data.node_type, target=data.target[t], edge_index=data.edge_index, mesh_pos=data.mesh_pos, time=data.time[t], swelling_phi=data.swelling_phi[t], swelling_phi_rate = data.swelling_phi_rate[t], cells=data.cells, mat_param = data.mat_param)
         graphs.append(graph.to(device))
         # run rollout
     rollout_preds = []
@@ -40,6 +40,7 @@ def rollout(model, data) :
             "gt" : gt,
             "mesh_pos" : data.mesh_pos,
             "cells": data.cells,
+            "mat_param": data.mat_param,
             "node_type": data.node_type,
             "swell_phi": data.swelling_phi,
             "swell_phi_rate": data.swelling_phi_rate,
