@@ -190,7 +190,7 @@ if __name__ == "__main__":
                 total_rmse_phi += rmse_phi
                 num_rollouts += 1
                 logger.info(
-                f"Rollout Nr.{num_rollouts + 1} Loss: {rollout_loss:.6f}, "
+                f"Rollout Nr.{num_rollouts} Loss: {rollout_loss:.6f}, "
                 f"RMSE_x: {rmse_x:.6f}, "
                 f"RMSE_y: {rmse_y:.6f}, "
                 f"RMSE_phi: {rmse_phi:.6f}"
