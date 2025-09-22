@@ -152,7 +152,8 @@ class EncodeProcessDecode(nn.Module):
 
         return output
     def _build_node_features(self, graph) :
-        time_emb = sinusoidal_time_embedding(graph.time, dim = 4)
+        # time_emb = sinusoidal_time_embedding(graph.time, dim = 4)
+        time_emb = graph.time
         u = graph.world_pos - graph.mesh_pos
         phi = graph.phi
         swell_phi = graph.swelling_phi
