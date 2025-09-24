@@ -4,8 +4,8 @@ import torch.optim as optim
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from core.datasetclass import HydrogelDatasetHistory
-from core.meshgraphnet import EncodeProcessDecodeVerlet   
-from core.rollout import rollout_verlet
+from core.meshgraphnet import EncodeProcessDecodeHistory   
+from core.rollout import rollout_history
 from tqdm import tqdm
 import os
 import yaml
@@ -37,7 +37,7 @@ def log_model_parameters(model):
 
 if __name__ == "__main__":
     # read model and training parameters from config yml file if exists
-    config_path = "train_verlet_config.yml"
+    config_path = "train_history_config.yml"
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(all_graphs, batch_size=1, shuffle=True)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = EncodeProcessDecodeVerlet(
+    model = EncodeProcessDecodeHistory(
         node_in_dim=node_in_dim,
         edge_in_dim=edge_in_dim,
         hidden_size=hidden_size,
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         num_rollouts = 0
         with torch.no_grad():
             for trajectory in rollout_dataset:
-                rollout_result = rollout_verlet(model, trajectory)
+                rollout_result = rollout_history(model, trajectory)
                 rmse_x, rmse_y, rmse_phi = (
                     rollout_result["rmse_x"],
                     rollout_result["rmse_y"],

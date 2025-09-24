@@ -116,7 +116,7 @@ class HydrogelDatasetHistory(Dataset):
         phi = torch.tensor(sample["φ_time_series"], dtype=torch.float32).unsqueeze(-1)
         swell_phi = torch.tensor(sample["swell_time_series"], dtype=torch.float32).unsqueeze(-1)  # (T, 1)
         time = torch.tensor(sample["t"], dtype=torch.float32)
-        mat_param = torch.cat([sample['chi'], sample["diffusivity"]], dtype=torch.float32)
+        mat_param = torch.tensor([sample['chi'].item(), sample['diffusivity'].item()], dtype=torch.float32)
         swell_nodes = node_type[:, 4] == 1
         swell_phi_tensor = torch.zeros_like(phi)
         swell_phi_tensor[:, swell_nodes, :] = swell_phi.unsqueeze(-1).expand(phi.shape[0], sum(swell_nodes), phi.shape[2])

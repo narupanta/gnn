@@ -12,7 +12,7 @@ from core.rollout import rollout
 
 if __name__ == "__main__":
     # find config.yml in model directory
-    load_model_dir = "./trained_models/20250919T133846"
+    load_model_dir = "./trained_models/20250919T213431"
     save_rollout_dir = "./rollouts"
     config_path = os.path.join(load_model_dir, 'config.yml')
     if not os.path.exists(config_path):
@@ -37,7 +37,6 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = EncodeProcessDecode(node_in_dim=node_in_dim,
                                 edge_in_dim=edge_in_dim,
-                                mat_param_dim=mat_param_dim,
                                 hidden_size=hidden_size,
                                 process_steps=process_steps,
                                 node_out_dim=node_out_dim,
@@ -66,7 +65,10 @@ if __name__ == "__main__":
                             swell_phi_rate = trajectory_rollout["swell_phi_rate"].detach().cpu().numpy(),
                             node_type = trajectory_rollout["node_type"].detach().cpu().numpy(),
                             cells = trajectory_rollout["cells"].detach().cpu().numpy(),
-                            mesh_pos = trajectory_rollout["mesh_pos"].detach().cpu().numpy())
+                            mesh_pos = trajectory_rollout["mesh_pos"].detach().cpu().numpy(),
+                            rmse_x = trajectory_rollout["rmse_x"].detach().cpu().numpy(),
+                            rmse_y = trajectory_rollout["rmse_y"].detach().cpu().numpy(),
+                            rmse_phi = trajectory_rollout["rmse_phi"].detach().cpu().numpy(),)
         print(f"Rollout predictions and error saved in {save_rollout_dir}")
         
 

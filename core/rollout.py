@@ -15,10 +15,10 @@ def rollout(model, data) :
     with torch.no_grad():
         loop = tqdm(range(len(graphs)), desc ="Rollout")
         for t in loop:
-            # if t % 1 == 0:
+            # if t % 10 == 0:
             #     print(f" Rollout step {t}/{len(graphs)}")
             #     # correct curr_graph to ground truth to avoid drift
-            #     curr_graph = graphs[t-1].to(device)
+            #     curr_graph = graphs[t].to(device)
             #     # predict next state
             curr_graph.time = graphs[t].time
             curr_graph.swelling_phi = graphs[t].swelling_phi
@@ -48,7 +48,7 @@ def rollout(model, data) :
             "rmse_y": rmse_y,
             "rmse_phi": rmse_phi}  
 
-def rollout_verlet(model, data) :
+def rollout_history(model, data) :
     device = model.device
     # split trajectory into frames
     graphs = []
