@@ -98,6 +98,7 @@ if __name__ == "__main__":
                         cells=data.cells)
             all_graphs.append(graph)
 
+    # Scheduler (optional: cosine annealing works well for GNNs)
     train_loader = DataLoader(all_graphs, batch_size=1, shuffle=True)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -183,7 +184,12 @@ if __name__ == "__main__":
                 total_rmse_y += rmse_y
                 total_rmse_phi += rmse_phi
                 num_rollouts += 1
-
+                logger.info(
+                f"Rollout Nr.{num_rollouts} Loss: {rollout_loss:.6f}, "
+                f"RMSE_x: {rmse_x:.6f}, "
+                f"RMSE_y: {rmse_y:.6f}, "
+                f"RMSE_phi: {rmse_phi:.6f}"
+            )
         avg_rollout_loss = total_rollout_loss / max(1, num_rollouts)
         avg_rmse_x = total_rmse_x / max(1, num_rollouts)
         avg_rmse_y = total_rmse_y / max(1, num_rollouts)
@@ -202,9 +208,11 @@ if __name__ == "__main__":
             best_model_dir = os.path.join(model_dir, "best_model")
             os.makedirs(best_model_dir, exist_ok=True)
             model.save_model(best_model_dir)
+            logger.info("best rollout model saved")
 
         # Save checkpoint every 20 epochs
         if (train_epoch + 1) % 20 == 0:
             epoch_model_dir = os.path.join(model_dir, f"epoch_{train_epoch+1}")
             os.makedirs(epoch_model_dir, exist_ok=True)
             model.save_model(epoch_model_dir)
+            logger.info("epoch model saved")
