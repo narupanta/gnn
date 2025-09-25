@@ -130,10 +130,9 @@ if __name__ == "__main__":
         loop = tqdm(train_loader, leave=False)
         for trajectory in loop:   # trajectory is a list of graphs
             optimizer.zero_grad()
-            chec = trajectory
             # Move graphs to device
             graph_seq = []
-            for t in range(10) :
+            for t in range(trajectory.world_pos.shape[0]) :
                 graph = Data(world_pos=trajectory.world_pos[t], 
                             phi = trajectory.phi[t],
                             node_type = trajectory.node_type, target=trajectory.target[t], edge_index=trajectory.edge_index, mesh_pos=trajectory.mesh_pos, time=trajectory.time[t], 
