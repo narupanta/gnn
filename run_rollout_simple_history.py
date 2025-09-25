@@ -3,18 +3,18 @@ import torch
 import yaml
 import os
 from datetime import datetime
-from core.meshgraphnet import EncodeProcessDecode
-from core.datasetclass import HydrogelDataset
+from core.meshgraphnet import EncodeProcessDecodeHistory
+from core.datasetclass import HydrogelDatasetHistory
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader  
 import numpy as np
-from core.rollout import rollout
+from core.rollout import rollout_history
 
 if __name__ == "__main__":
     # find config.yml in model directory
-    load_model_dir = "./trained_models/20250919T213404"
-    data_dir = "./dataset/free_swelling_testset"
-    save_rollout_dir = "./rollouts/free_swelling_testset"
+    load_model_dir = "./trained_models/20250924T222223"
+    data_dir = "./dataset/bending_signal_"
+    save_rollout_dir = "./rollouts/bending_signal_simple_history_trainset"
     config_path = os.path.join(load_model_dir, 'config.yml')
     if not os.path.exists(config_path):
         print(f"Config file not found in {load_model_dir}")
@@ -39,7 +39,7 @@ if __name__ == "__main__":
             data_dir = config["paths"]["data_dir"]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = EncodeProcessDecode(node_in_dim=node_in_dim,
+    model = EncodeProcessDecodeHistory(node_in_dim=node_in_dim,
                                 edge_in_dim=edge_in_dim,
                                 hidden_size=hidden_size,
                                 process_steps=process_steps,
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     model.load_model(model_path)
     model.eval()
     
-    dataset = HydrogelDataset(data_dir = data_dir, noise_level=0)
+    dataset = HydrogelDatasetHistory(data_dir = data_dir, noise_level=0.0)
     
     # loop through all samples in the dataset
     for idx in range(len(dataset)):
@@ -58,7 +58,7 @@ if __name__ == "__main__":
         print(f"Running rollout for sample {sample_name} ({idx+1}/{len(dataset)})")
         data = dataset[idx].to(device)
         # input trajectory into rollout prediction
-        trajectory_rollout = rollout(model, data)
+        trajectory_rollout = rollout_history(model, data)
         # save rollout predictions and error
         os.makedirs(os.path.join(save_rollout_dir, sample_name), exist_ok=True)
         np.savez_compressed(os.path.join(save_rollout_dir, sample_name, 'rollout.npz'),
