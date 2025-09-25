@@ -279,7 +279,8 @@ class EncodeProcessDecodeHistory(nn.Module):
         swelling_phi_rate_prev = graph.swelling_phi_rate_prev
         node_type = graph.node_type
         time_emb = time_emb.unsqueeze(0).repeat(u.shape[0], 1)
-        x = torch.cat([u, u_prev, phi, prev_phi, swell_phi, swelling_phi_rate, swelling_phi_rate_prev, node_type, time_emb], dim = -1)
+        mat_param = graph.mat_param.unsqueeze(0).repeat(u.shape[0], 1)
+        x = torch.cat([u, u_prev, phi, prev_phi, swell_phi, swelling_phi_rate, swelling_phi_rate_prev, node_type, mat_param, time_emb], dim = -1)
         return x
     def _build_edge_features(self, graph) :
         senders, receivers = graph.edge_index[0], graph.edge_index[1]

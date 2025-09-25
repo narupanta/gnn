@@ -58,7 +58,7 @@ def rollout_history(model, data) :
                      node_type = data.node_type, target=data.target[t], edge_index=data.edge_index, mesh_pos=data.mesh_pos, time=data.time[t], 
                      swelling_phi=data.swelling_phi[t], 
                      swelling_phi_rate = data.swelling_phi_rate[t], swelling_phi_rate_prev = data.swelling_phi_rate_prev[t], 
-                     cells=data.cells)
+                     cells=data.cells, mat_param = data.mat_param)
         graphs.append(graph.to(device))
         # run rollout
     rollout_preds = []
