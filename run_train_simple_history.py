@@ -55,6 +55,7 @@ if __name__ == "__main__":
         percentage_train = config["training"].get("percentage_train", 0.8)
         start_noise = config["training"].get("start_noise", 0.1)
         end_noise = config["training"].get("end_noise", 0.01)
+        with_mat_params = config["training"].get("with_mat_params", True)
         save_model_dir = config["paths"].get("save_model_dir", './trained_models')
         data_dir = config["paths"]["data_dir"]
 

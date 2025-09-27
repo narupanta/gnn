@@ -113,12 +113,14 @@ class EncodeProcessDecode(nn.Module):
                  process_steps=3,
                  node_out_dim=0, 
                  attention=False,
+                 with_mat_params = True,
                  device = "cpu"):
         super().__init__()
         # Encoders
         self.node_encoder = MLP(node_in_dim, hidden_size, hidden_dims=(hidden_size,), layer_norm=True)
         self.edge_encoder = MLP(edge_in_dim, hidden_size, hidden_dims=(hidden_size,), layer_norm=True)
         self.attention = attention
+        self.with_mat_params = with_mat_params
         # Processor: stack of message passing steps
         self.process_steps = process_steps
         self.processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size, attention)
@@ -162,7 +164,10 @@ class EncodeProcessDecode(nn.Module):
         time_emb = time_emb.unsqueeze(0).repeat(u.shape[0], 1)
         mat_param = graph.mat_param.unsqueeze(0).repeat(u.shape[0], 1)
         # mat_param = _apply_film
-        x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb, mat_param], dim = -1)
+        if self.with_mat_params :
+            x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb, mat_param], dim = -1)
+        else :
+            x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb], dim = -1)
         return x
     def _build_edge_features(self, graph) :
         senders, receivers = graph.edge_index[0], graph.edge_index[1]
