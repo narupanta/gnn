@@ -1,0 +1,21 @@
+device: cuda
+paths:
+  data_dir: ./dataset/free_swelling/
+  model_dir: ./trained_models/
+model: 
+  node_in_dim: 16
+  edge_in_dim: 7
+  mat_param_dim: 2
+  node_out_dim: 3
+  hidden_size: 128
+  process_steps: 8
+  coarse_process_steps: 5
+  sample_ratio: 0.3
+  attention: False
+training:
+  learning_rate: 1e-3
+  weight_decay: 1e-5
+  num_epochs: 20
+  start_noise_level: 0.05
+  end_noise_level: 0.01
+  with_mat_params: True
