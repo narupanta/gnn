@@ -397,20 +397,23 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         # Normalize x and edge features before input to encoder
         x = self._build_node_features(batch)
         e = self._build_edge_features(batch)
-        ce, c_edge_index = self._build_coarse_edge_features(batch)
+        ce, c_edge_index, first_indices = self._build_coarse_edge_features(batch)
         x_h = self.node_encoder(self.node_features_normalizer(x))
         e_h = self.edge_encoder(self.edge_features_normalizer(e))
         ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce))
 
         # Process (multiple message-passing steps)
-        cx_h = x_h.clone()
+        cx_h = x_h[first_indices]
         for i, proc in enumerate(self.processors):
             x_h, e_h = proc(x_h, batch.edge_index, e_h)
         for i, proc in enumerate(self.coarse_processors) :
             cx_h, ce_h = proc(cx_h, c_edge_index, ce_h)
 
         # check = cx_h - check_x_h
-        x_h = torch.cat([x_h, cx_h], dim = -1)
+        map_back = torch.zeros_like(x_h)
+        map_back[first_indices] = cx_h
+        
+        x_h = torch.cat([x_h, map_back], dim = -1)
         # Decode
         output = self.node_decoder(x_h)
 
@@ -489,7 +492,7 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         rel_phi = phi[sampled_senders] - phi[sampled_receivers]
         edge_features = torch.cat([rel_position, distance, rel_world_pos, distance_world_pos, rel_phi], dim=-1)
 
-        return edge_features, sampled_edge_index_by_original
+        return edge_features, sampled_edge_index, first_indices
 
     def loss(self, graph):
         target = graph.target
@@ -586,7 +589,7 @@ class EncodeProcessDecodeMultiScaleHistory(nn.Module):
         ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce))
 
         # Process (multiple message-passing steps)
-        cx_h = x_h.clone()
+        cx_h = x_h
         for i, proc in enumerate(self.processors):
             x_h, e_h = proc(x_h, batch.edge_index, e_h)
         for i, proc in enumerate(self.coarse_processors) :
@@ -671,7 +674,7 @@ class EncodeProcessDecodeMultiScaleHistory(nn.Module):
         rel_phi = phi[sampled_senders] - phi[sampled_receivers]
         edge_features = torch.cat([rel_position, distance, rel_world_pos, distance_world_pos, rel_phi], dim=-1)
 
-        return edge_features, sampled_edge_index_by_original
+        return edge_features, sampled_edge_index, first_indices
 
     def loss(self, graph):
         target = graph.target
