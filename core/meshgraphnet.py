@@ -397,23 +397,23 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         # Normalize x and edge features before input to encoder
         x = self._build_node_features(batch)
         e = self._build_edge_features(batch)
-        ce, c_edge_index, first_indices = self._build_coarse_edge_features(batch)
+        ce, c_edge_index = self._build_coarse_edge_features(batch)
         x_h = self.node_encoder(self.node_features_normalizer(x))
         e_h = self.edge_encoder(self.edge_features_normalizer(e))
         ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce))
 
         # Process (multiple message-passing steps)
-        cx_h = x_h[first_indices]
+        cx_h = x_h.clone()
         for i, proc in enumerate(self.processors):
             x_h, e_h = proc(x_h, batch.edge_index, e_h)
         for i, proc in enumerate(self.coarse_processors) :
             cx_h, ce_h = proc(cx_h, c_edge_index, ce_h)
 
         # check = cx_h - check_x_h
-        map_back = torch.zeros_like(x_h)
-        map_back[first_indices] = cx_h
-        
-        x_h = torch.cat([x_h, map_back], dim = -1)
+        # map_back = torch.zeros_like(x_h)
+        # map_back[first_indices] = cx_h
+
+        x_h = torch.cat([x_h, cx_h], dim = -1)
         # Decode
         output = self.node_decoder(x_h)
 
@@ -427,13 +427,12 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         swelling_phi_rate = graph.swelling_phi_rate
         node_type = graph.node_type
         time_emb = time_emb.unsqueeze(0).repeat(u.shape[0], 1)
-        physical_time = graph.time.unsqueeze(0).repeat(u.shape[0], 1)
         mat_param = graph.mat_param.unsqueeze(0).repeat(u.shape[0], 1)
         # mat_param = _apply_film
         if self.with_mat_params :
-            x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb, physical_time, mat_param], dim = -1)
+            x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb, mat_param], dim = -1)
         else :
-            x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb, physical_time], dim = -1)
+            x = torch.cat([u, phi, swell_phi, swelling_phi_rate, node_type, time_emb], dim = -1)
         return x
     def _build_edge_features(self, graph) :
         senders, receivers = graph.edge_index[0], graph.edge_index[1]
@@ -492,7 +491,7 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         rel_phi = phi[sampled_senders] - phi[sampled_receivers]
         edge_features = torch.cat([rel_position, distance, rel_world_pos, distance_world_pos, rel_phi], dim=-1)
 
-        return edge_features, sampled_edge_index, first_indices
+        return edge_features, sampled_edge_index_by_original
 
     def loss(self, graph):
         target = graph.target
