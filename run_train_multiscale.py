@@ -50,6 +50,7 @@ if __name__ == "__main__":
         node_out_dim = config["model"]["node_out_dim"]
         attention = config["model"]["attention"]
         sample_ratio = config["model"]["sample_ratio"]
+        time_dim = config["model"]["time_dim"]
 
         learning_rate = float(config["training"]["learning_rate"])
         weight_decay = float(config["training"].get("weight_decay", 1e-5))
@@ -120,6 +121,7 @@ if __name__ == "__main__":
         attention=attention,
         sample_ratio=sample_ratio,
         with_mat_params=with_mat_params,
+        time_dim=time_dim,
         device=device
     ).to(device)
     # --- Example usage ---
