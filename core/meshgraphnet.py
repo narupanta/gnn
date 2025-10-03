@@ -25,6 +25,7 @@ from .normalization import Normalizer
 from scipy.spatial import Delaunay
 from .normalization import Normalizer
 from torch_geometric.nn import knn_graph
+from torch_geometric.utils import softmax
 import os
 def sinusoidal_time_embedding(t, dim=16):
     """
@@ -88,12 +89,13 @@ class EdgeNodeMessagePassing(MessagePassing):
                 
         return new_node_features, new_edge_features
     
-    def message(self, x_i, x_j, edge_attr):
+    def message(self, x_i, x_j, edge_attr, index):
         # Compute attention score
         if self.attention :
-            alpha = (self.attn_lin(x_i) * self.attn_lin(x_j)).sum(dim=-1, keepdim=True)
+            alpha = (self.attn_lin(x_i) * self.attn_lin(x_j)).sum(dim=-1)  # [E]
             alpha = F.leaky_relu(alpha)
-            alpha = torch.softmax(alpha, dim=0)  # softmax over neighbors
+            alpha = softmax(alpha, index=index)  # normalize per target node
+            alpha = alpha.unsqueeze(-1)  # [E, 1]
 
             # Message is neighbor feature weighted by attention
             msg = alpha * self.edge_mlp(torch.cat([x_i, x_j, edge_attr], dim=-1))
@@ -377,16 +379,18 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         self.process_steps = process_steps
         self.processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size, attention)
                                          for _ in range(process_steps)])
-        self.coarse_processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size, attention)
+        
+        if sample_ratio > 0:
+            self.coarse_edge_features_normalizer = Normalizer(edge_in_dim, device)
+            self.coarse_processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size, attention)
                                          for _ in range(coarse_process_steps)])
 
         # Decoder MLPs
-        self.node_decoder = MLP(2*hidden_size, node_out_dim, hidden_dims=(hidden_size,), layer_norm=False) if node_out_dim > 0 else None
+        self.node_decoder = MLP(2*hidden_size, node_out_dim, hidden_dims=(hidden_size,), layer_norm=False) if sample_ratio > 0 else MLP(hidden_size, node_out_dim, hidden_dims=(hidden_size,), layer_norm=False)
 
         self.device = device
         self.node_features_normalizer = Normalizer(node_in_dim, device)
         self.edge_features_normalizer = Normalizer(edge_in_dim, device)
-        self.coarse_edge_features_normalizer = Normalizer(edge_in_dim, device)
         self.output_normalizer = Normalizer(node_out_dim, device)
     def forward(self, batch):
         # x: [N, node_in_dim]
@@ -397,30 +401,32 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         # Normalize x and edge features before input to encoder
         x = self._build_node_features(batch)
         e = self._build_edge_features(batch)
-        ce, c_edge_index = self._build_coarse_edge_features(batch)
         x_h = self.node_encoder(self.node_features_normalizer(x))
         e_h = self.edge_encoder(self.edge_features_normalizer(e))
-        ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce))
-
+        if self.sample_ratio > 0 :
+            ce, c_edge_index, first_indices = self._build_coarse_edge_features(batch)
+            ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce))
+            cx_h = x_h[first_indices]
         # Process (multiple message-passing steps)
-        cx_h = x_h.clone()
         for i, proc in enumerate(self.processors):
             x_h, e_h = proc(x_h, batch.edge_index, e_h)
-        for i, proc in enumerate(self.coarse_processors) :
-            cx_h, ce_h = proc(cx_h, c_edge_index, ce_h)
 
-        # check = cx_h - check_x_h
-        # map_back = torch.zeros_like(x_h)
-        # map_back[first_indices] = cx_h
+        if self.sample_ratio > 0 :
+        
+            for i, proc in enumerate(self.coarse_processors) :
+                cx_h, ce_h = proc(cx_h, c_edge_index, ce_h)
 
-        x_h = torch.cat([x_h, cx_h], dim = -1)
+            map_back = torch.zeros_like(x_h)
+            map_back[first_indices] = cx_h
+            x_h = torch.cat([x_h, map_back], dim = -1)
+        
         # Decode
+
         output = self.node_decoder(x_h)
 
         return output
     def _build_node_features(self, graph) :
         time_emb = sinusoidal_time_embedding(graph.time, dim = self.time_dim)
-        # time_emb = graph.time
         u = graph.world_pos - graph.mesh_pos
         phi = graph.phi
         swell_phi = graph.swelling_phi
@@ -491,7 +497,7 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         rel_phi = phi[sampled_senders] - phi[sampled_receivers]
         edge_features = torch.cat([rel_position, distance, rel_world_pos, distance_world_pos, rel_phi], dim=-1)
 
-        return edge_features, sampled_edge_index_by_original
+        return edge_features, sampled_edge_index, first_indices
 
     def loss(self, graph):
         target = graph.target
@@ -529,14 +535,16 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         torch.save(self.output_normalizer, os.path.join(path, "output_normalizer.pth"))
         torch.save(self.node_features_normalizer, os.path.join(path, "node_features_normalizer.pth"))
         torch.save(self.edge_features_normalizer, os.path.join(path, "edge_features_normalizer.pth"))
-        torch.save(self.coarse_edge_features_normalizer, os.path.join(path, "coarse_edge_features_normalizer.pth"))
+        if self.sample_ratio > 0 :
+            torch.save(self.coarse_edge_features_normalizer, os.path.join(path, "coarse_edge_features_normalizer.pth"))
 
     def load_model(self, path):
         self.load_state_dict(torch.load(os.path.join(path, "model_weights.pth"), weights_only=True))
         self.output_normalizer = torch.load(os.path.join(path, "output_normalizer.pth"))
         self.node_features_normalizer = torch.load(os.path.join(path, "node_features_normalizer.pth"))
         self.edge_features_normalizer = torch.load(os.path.join(path, "edge_features_normalizer.pth"))
-        self.coarse_edge_features_normalizer = torch.load(os.path.join(path, "coarse_edge_features_normalizer.pth"))
+        if self.sample_ratio > 0 :
+            self.coarse_edge_features_normalizer = torch.load(os.path.join(path, "coarse_edge_features_normalizer.pth"))
 
 class EncodeProcessDecodeMultiScaleHistory(nn.Module):
     def __init__(self,
