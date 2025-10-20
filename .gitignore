@@ -1,11 +1,9 @@
-/hydrogel_bending.gif
-/hydrogel_bending_bending_7.5e-06_0.2_1_0.65_0.3_15.gif
-/hydrogel_bending_bending_7.5e-06_0.2_2_0.65_0.3_15.gif
-/hydrogel_bending_bending_7.5e-06_0.2_5.gif
-/hydrogel_bending_bending_7.5e-06_0.2_5_0.65_0.3_15.gif
-/hydrogel_bending_period5.gif
+
+*.gif
 /output.png
 /plot.ipynb
 /rollouts
 /selected_model
 /trained_models
+/plots
+/dataset

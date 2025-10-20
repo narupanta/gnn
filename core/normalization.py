@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class Normalizer(nn.Module):
-    """Feature normalizer for streaming (N, F) data (nodes or edges)."""
+    """Feature normalizer that supports inputs with shape (..., F)."""
 
     def __init__(self, feature_size, device, max_accumulations=10**6, std_epsilon=1e-8):
         super().__init__()
@@ -18,26 +18,23 @@ class Normalizer(nn.Module):
 
     def forward(self, data, accumulate=True):
         """
-        Normalize input data of shape (N, F).
+        Normalize input data of shape (..., F).
         """
+        flat = data.reshape(-1, data.shape[-1])  # flatten all leading dims into one
         if accumulate and self._num_accumulations < self._max_accumulations:
-            self._accumulate(data)
+            self._accumulate(flat)
 
-        return (data - self._mean()) / self._std_with_epsilon()
+        mean = self._mean()
+        std = self._std_with_epsilon()
+        return (data - mean) / std
 
     def inverse(self, normalized_data):
-        """
-        Inverse normalization.
-        """
         return normalized_data * self._std_with_epsilon() + self._mean()
 
-    def _accumulate(self, data):
-        """
-        Update running statistics from data of shape (N, F).
-        """
-        self._acc_sum += data.sum(dim=0)
-        self._acc_sum_squared += (data ** 2).sum(dim=0)
-        self._acc_count += data.shape[0]
+    def _accumulate(self, flat_data):
+        self._acc_sum += flat_data.sum(dim=0)
+        self._acc_sum_squared += (flat_data ** 2).sum(dim=0)
+        self._acc_count += flat_data.shape[0]
         self._num_accumulations += 1
 
     def _mean(self):
