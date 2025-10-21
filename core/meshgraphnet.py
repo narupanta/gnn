@@ -341,10 +341,10 @@ class EncodeProcessDecodeHistory(nn.Module):
         return edge_features
     def loss(self, graph):
         target = graph.target
-        prev = torch.cat([graph.prev_world_pos, graph.prev_phi], dim = -1)
+        # prev = torch.cat([graph.prev_world_pos, graph.prev_phi], dim = -1)
         curr = torch.cat([graph.world_pos, graph.phi], dim = -1)
         # prev = torch.cat([graph.prev_world_pos, graph.prev_phi], dim = -1)
-        target_delta = target - 2*curr + prev
+        target_delta = target - curr
         target_delta_normalize = self.output_normalizer(target_delta)
 
         pred_delta = self.forward(graph)
@@ -361,15 +361,15 @@ class EncodeProcessDecodeHistory(nn.Module):
         return graph_error_ux + graph_error_uy + 10 * graph_error_phi, graph_error_ux, graph_error_uy, graph_error_phi
     def predict(self, graph):
         with torch.no_grad():
-            pred_acc_normalized = self.forward(graph)
-            pred_acc = self.output_normalizer.inverse(pred_acc_normalized)
+            pred_delta_normalized = self.forward(graph)
+            pred_delta = self.output_normalizer.inverse(pred_delta_normalized)
             curr = torch.cat([graph.world_pos, graph.phi], dim = -1)
-            prev = torch.cat([graph.prev_world_pos, graph.prev_phi], dim = -1)
+            # prev = torch.cat([graph.prev_world_pos, graph.prev_phi], dim = -1)
 
             ux_dbc_nodes = graph.node_type[:, 1] == 1
             uy_dbc_nodes = graph.node_type[:, 2] == 1
             phi_dbc_nodes = graph.node_type[:, 3] == 1
-            pred_delta = curr + pred_acc - prev
+            # pred_delta = curr + pred_acc 
             pred_delta[ux_dbc_nodes, 0] = 0.0 # no change on fixed nodes
             pred_delta[uy_dbc_nodes, 1] = 0.0 # no change on fixed nodes
             pred_delta[phi_dbc_nodes, 2] = 0.0 # no change on fixed nodes
