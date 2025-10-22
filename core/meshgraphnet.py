@@ -300,6 +300,7 @@ class EncodeProcessDecodeHistory(nn.Module):
         # Normalize x and edge features before input to encoder
         x = self._build_node_features(batch)
         e = self._build_edge_features(batch)
+        
         x_h = self.node_encoder(self.node_features_normalizer(x))
         e_h = self.edge_encoder(self.edge_features_normalizer(e))
 
@@ -358,7 +359,7 @@ class EncodeProcessDecodeHistory(nn.Module):
         graph_error_ux = torch.mean(error[:, 0].masked_select(~ux_dbc_nodes))
         graph_error_uy = torch.mean(error[:, 1].masked_select(~uy_dbc_nodes))
         graph_error_phi = torch.mean(error[:, 2].masked_select(~phi_dbc_nodes))
-        return graph_error_ux + graph_error_uy + 10 * graph_error_phi, graph_error_ux, graph_error_uy, graph_error_phi
+        return graph_error_ux + graph_error_uy + graph_error_phi, graph_error_ux, graph_error_uy, graph_error_phi
     def predict(self, graph):
         with torch.no_grad():
             pred_delta_normalized = self.forward(graph)
