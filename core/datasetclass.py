@@ -164,9 +164,9 @@ class HydrogelDatasetHistory(Dataset):
         time = torch.tensor(t_new, dtype=torch.float32)
         
         mat_param = torch.tensor([sample['chi'].item(), sample['diffusivity'].item()], dtype=torch.float32)
-        swell_nodes = node_type[:, 4] == 1
-        swell_phi_tensor = torch.zeros_like(phi)
-        swell_phi_tensor[:, swell_nodes, :] = swell_phi.unsqueeze(-1).expand(phi.shape[0], sum(swell_nodes), phi.shape[2])
+        # swell_nodes = node_type[:, 4] == 1
+        # swell_phi_tensor = torch.zeros_like(phi)
+        swell_phi_tensor = swell_phi.unsqueeze(-1).expand(phi.shape[0], phi.shape[1], phi.shape[2])
     
         #create target as [target_u, target_phi] where target is next time step
         row, col = edge_index
@@ -184,8 +184,8 @@ class HydrogelDatasetHistory(Dataset):
         swelling_phi_prev = swell_phi_tensor[:-2, :, :]
         swelling_phi_curr = swell_phi_tensor[1:-1, :, :]
         swelling_phi_next = swell_phi_tensor[2:, :, :]
-        swelling_phi_rate_curr = (swelling_phi_next - swelling_phi_curr)/(delta_time_curr.unsqueeze(-1).unsqueeze(-1))
-        swelling_phi_rate_prev = (swelling_phi_curr - swelling_phi_prev)/(delta_time_prev.unsqueeze(-1).unsqueeze(-1))
+        swelling_phi_rate_curr = (swelling_phi_next - swelling_phi_curr)
+        swelling_phi_rate_prev = (swelling_phi_curr - swelling_phi_prev)
         if self.noise_level is not None:
             # u_curr noise define by average connection length of mesh
             # average connection length of mesh
