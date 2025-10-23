@@ -12,8 +12,8 @@ from core.rollout import rollout_history
 import meshio
 if __name__ == "__main__":
     # find config.yml in model directory
-    load_model_dir = "./trained_models/20251015T153813"
-    data_dir = "./dataset/bending_signal_"
+    load_model_dir = "./trained_models/20251022T181928"
+    data_dir = "./dataset/bending_signal_trainset"
     save_rollout_dir = "./rollouts/test"
     config_path = os.path.join(load_model_dir, 'config.yml')
     if not os.path.exists(config_path):
@@ -57,8 +57,8 @@ if __name__ == "__main__":
     for idx in range(len(dataset)):
         sample_name = dataset.get_name(idx)
         print(sample_name)
-        if not sample_name.endswith("re") :
-            continue  
+        # if idx != 0 :
+        #     continue  
         print(f"Running rollout for sample {sample_name} ({idx+1}/{len(dataset)})")
         data = dataset[idx].to(device)
         # input trajectory into rollout prediction
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         gt = data["gt"]                  # same shape
         cells = data["cells"]            # [num_cells, nodes_per_cell]
         time = data["time"]
-
+        print(time[1] - time[0])
         # Handle 2D -> 3D conversion
         def ensure_3d(coords):
             if coords.shape[2] == 2:
@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
         pred_coords = ensure_3d(pred[:, :, :2])
         gt_coords = ensure_3d(gt[:, :, :2])
-
+        swell_phi = data["swell_phi"]
         # Determine mesh cell type
         num_nodes_per_cell = cells.shape[1]
         if num_nodes_per_cell == 3:
@@ -126,13 +126,13 @@ if __name__ == "__main__":
             raise ValueError(f"Unsupported cell with {num_nodes_per_cell} nodes")
 
         # Function to write VTU files
-        def write_vtu_series(coords, scalars, folder, prefix):
+        def write_vtu_series(coords, scalars, load, folder, prefix):
             pvd_entries = []
             for t_idx in range(coords.shape[0]):
                 mesh = meshio.Mesh(
                     points=coords[t_idx],
                     cells=[(cell_type, cells)],
-                    point_data={f"{prefix}_phi": scalars[t_idx]}
+                    point_data={f"{prefix}_phi": scalars[t_idx], f"swelling_phi": load[t_idx]}
                 )
                 filename = f"{prefix}_{t_idx:04d}.vtu"
                 filepath = os.path.join(folder, filename)
@@ -154,10 +154,10 @@ if __name__ == "__main__":
             print(f"PVD file saved at: {os.path.join(folder, f'{prefix}.pvd')}")
 
         # Write prediction series
-        write_vtu_series(pred_coords, pred[:, :, 2], pred_dir, "pred")
+        write_vtu_series(pred_coords, pred[:, :, 1], swell_phi, pred_dir, "pred")
 
         # Write ground truth series
-        write_vtu_series(gt_coords, gt[:, :, 2], gt_dir, "gt")
+        write_vtu_series(gt_coords, gt[:, :, 1], swell_phi, gt_dir, "gt")
 
         print(f"Visualization files saved in {save_paraview_dir}")
         

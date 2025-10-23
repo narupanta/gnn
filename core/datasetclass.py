@@ -39,7 +39,7 @@ def triangles_to_edges(faces):
     two_way_connectivity = (torch.cat((senders, receivers), dim=0), torch.cat((receivers, senders), dim=0))
     return {'two_way_connectivity': two_way_connectivity, 'senders': senders, 'receivers': receivers}
 class HydrogelDataset(Dataset):
-    def __init__(self, data_dir, noise_level=None, time_dim=5):
+    def __init__(self, data_dir, noise_level=None, add_targets = None, split_to_frames = None, time_dim=5):
         """
         Args:
             data_dir (str): Directory containing .npz hydrogel samples
@@ -48,6 +48,8 @@ class HydrogelDataset(Dataset):
         """
         self.data_dir = data_dir
         self.noise_level = noise_level
+        self.add_targets = add_targets
+        self.split_to_frames = split_to_frames
         self.time_dim = time_dim
         self.data_files = [f for f in os.listdir(data_dir) if f.endswith('.npz')]
 
@@ -63,7 +65,6 @@ class HydrogelDataset(Dataset):
         mesh_pos = torch.tensor(sample['mesh_coords'], dtype=torch.float32)
         cells = torch.tensor(sample['cells'], dtype=torch.long)
         edge_index = cells_to_edge_index(cells)
-        edge_index2 = triangles_to_edges(cells)["two_way_connectivity"]
         node_type = torch.tensor(sample["node_type"], dtype=torch.float32)
         u = torch.tensor(sample['u_time_series'], dtype=torch.float32)
         world_pos = mesh_pos + u
@@ -77,56 +78,64 @@ class HydrogelDataset(Dataset):
         swell_phi_tensor = torch.zeros((phi.shape[0], phi.shape[1]), device=phi.device)
         swell_phi_tensor[:, swell_nodes] = swell_phi.expand(phi.shape[0], sum(swell_nodes))
 
+
         # Compute target as next time step (delta = coarse step)
         row, col = edge_index
-        time_curr = time[:-self.time_dim]
-        time_next = torch.stack([time[i + 1: i + 1 + self.time_dim] for i in range(time_curr.shape[0])])
-        delta_time = torch.stack([time[i + 1: i + 1 + self.time_dim] - time_curr[i] for i in range(time_curr.shape[0])])
+        if self.add_targets :
+            time_curr = time[:-self.time_dim]
 
-        world_pos_curr = world_pos[:-self.time_dim]
-        target_world_pos = torch.stack([world_pos[i + 1: i + 1 + self.time_dim] for i in range(world_pos_curr.shape[0])])
-        phi_curr = phi[:-self.time_dim]
-        target_phi = torch.stack([phi[i + 1: i + 1 + self.time_dim] for i in range(phi_curr.shape[0])])
-        swelling_phi = torch.stack([swell_phi_tensor[i: i + self.time_dim + 1].T for i in range(phi_curr.shape[0])])
-        swelling_phi_rate = torch.stack([
-                (swell_phi_tensor[i + 1: i + 1 + self.time_dim] - swell_phi_tensor[i]).T/delta_time[i]
-                for i in range(phi_curr.shape[0])
-            ])
-        # --- Optional noise ---
-        if self.noise_level is not None:
-            avg_conn_length = torch.mean(torch.norm(mesh_pos[row] - mesh_pos[col], dim=-1))
-            world_pos_noise = torch.randn_like(world_pos_curr) * self.noise_level * avg_conn_length
-            ux_dbc = node_type[:, 1] == 1
-            uy_dbc = node_type[:, 2] == 1
-            world_pos_noise[:, ux_dbc, 0] = 0.0
-            world_pos_noise[:, uy_dbc, 1] = 0.0
-            world_pos_curr += world_pos_noise
+            world_pos_curr = world_pos[:-self.time_dim]
+            target_world_pos = torch.stack([world_pos[i + 1: i + 1 + self.time_dim] for i in range(world_pos_curr.shape[0])])
+            phi_curr = phi[:-self.time_dim]
+            target_phi = torch.stack([phi[i + 1: i + 1 + self.time_dim] for i in range(phi_curr.shape[0])])
+            swelling_phi = torch.stack([swell_phi_tensor[i: i + self.time_dim + 1].T for i in range(phi_curr.shape[0])])
+            frames = []
+            for t in range(world_pos_curr.shape[0]) :
+                if self.noise_level > 0.0 :
+                    avg_conn_length = torch.max(torch.norm(mesh_pos[row] - mesh_pos[col], dim=-1))
+                    world_pos_noise = torch.randn_like(world_pos_curr[t]) * self.noise_level * avg_conn_length
+                    ux_dbc = node_type[:, 1] == 1
+                    uy_dbc = node_type[:, 2] == 1
+                    world_pos_noise[ux_dbc, 0] = 0.0
+                    world_pos_noise[uy_dbc, 1] = 0.0
 
-            phi_range = torch.max(phi) - torch.min(phi)
-            phi_noise = torch.randn_like(phi_curr) * self.noise_level * phi_range
-            phi_dbc = node_type[:, 3] == 1
-            phi_noise[:, phi_dbc] = 0.0
-            phi_curr += phi_noise
+                    phi_range = torch.max(phi) - torch.min(phi)
+                    phi_noise = torch.randn_like(phi_curr[t]) * self.noise_level * phi_range
+                    phi_dbc = node_type[:, 3] == 1
+                    phi_noise[phi_dbc] = 0.0
 
-        # Concatenate target
-        target = torch.cat([target_world_pos, target_phi], dim=-1)
+                    world_pos_t = world_pos_curr[t] + world_pos_noise
+                    phi_t = phi_curr[t] + phi_noise
+                else :
+                    world_pos_t = world_pos_curr[t]
+                    phi_t = phi_curr[t]
 
-        data = dict(
-            world_pos=world_pos_curr,
-            phi=phi_curr,
-            swelling_phi=swelling_phi,
-            swelling_phi_rate=swelling_phi_rate,
-            node_type=node_type,
-            target=target,
-            edge_index=edge_index,
-            mesh_pos=mesh_pos,
-            time=time_curr,
-            delta_time = delta_time,
-            cells=cells,
-            mat_param=mat_param
-        )
-
-        return data
+                swelling_phi_t = swelling_phi[t]
+                target_world_pos_t = target_world_pos[t]
+                target_phi_t = target_phi[t]
+                frame = Data(mesh_pos = mesh_pos,
+                            node_type = node_type,
+                            mat_param = mat_param,
+                            cells = cells,
+                            edge_index=edge_index,
+                            time = time_curr[t],
+                            world_pos = world_pos_t,
+                            phi = phi_t,
+                            swelling_phi = swelling_phi_t,
+                            target = torch.cat([target_world_pos_t, target_phi_t], dim=-1))
+                frames.append(frame)
+            return frames
+        else :
+            frames = [Data(mesh_pos = mesh_pos,
+                           node_type = node_type,
+                           mat_param = mat_param,
+                           cells = cells,
+                           edge_index=edge_index,
+                           time = time[t],
+                           world_pos = world_pos[t],
+                           phi = phi[t],
+                           swelling_phi = swell_phi_tensor[t]) for t in range(world_pos.shape[0])]
+            return frames
 
     
 class HydrogelDatasetHistory(Dataset):
@@ -164,9 +173,9 @@ class HydrogelDatasetHistory(Dataset):
         time = torch.tensor(t_new, dtype=torch.float32)
         
         mat_param = torch.tensor([sample['chi'].item(), sample['diffusivity'].item()], dtype=torch.float32)
-        # swell_nodes = node_type[:, 4] == 1
-        # swell_phi_tensor = torch.zeros_like(phi)
-        swell_phi_tensor = swell_phi.unsqueeze(-1).expand(phi.shape[0], phi.shape[1], phi.shape[2])
+        swell_nodes = node_type[:, 4] == 1
+        swell_phi_tensor = torch.zeros_like(phi)
+        swell_phi_tensor[:, swell_nodes, ] = swell_phi.unsqueeze(-1).expand(phi.shape[0], sum(swell_nodes), phi.shape[2])
     
         #create target as [target_u, target_phi] where target is next time step
         row, col = edge_index
@@ -407,8 +416,10 @@ class HydrogelDatasetFlexibleHistory(Dataset):
     
 
 if __name__ == "__main__":
-    dataset = HydrogelDataset(data_dir = "/mnt/c/Users/narun/Desktop/Project/hydrogel/gnn/dataset/free_swelling", noise_level=0.01)
+    dataset = HydrogelDataset(data_dir = "/mnt/c/Users/narun/Desktop/Project/hydrogel/gnn/dataset/free_swelling", noise_level=0.01,
+                              add_targets=None,
+                              split_to_frames=True)
     data = dataset[0]
-    print(data.mat_param)
+    print(data[0].mat_param)
     print(len(dataset))
 

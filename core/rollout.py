@@ -4,62 +4,42 @@ from copy import deepcopy
 from tqdm import tqdm
 # from copy import deepcopy
 from torch_geometric.data import Data
-
 def rollout(model, data):
     device = model.device
-
-    # Split trajectory into frames
-    graphs = []
-    for t in range(data["world_pos"].shape[0]):
-        graph = dict(
-            world_pos=data["world_pos"][t],
-            phi=data["phi"][t],
-            node_type=data["node_type"],
-            target=data["target"][t],
-            edge_index=data["edge_index"],
-            mesh_pos=data["mesh_pos"],
-            time=data["time"][t],
-            delta_time=data["delta_time"][t],
-            swelling_phi=data["swelling_phi"][t],
-            swelling_phi_rate=data["swelling_phi_rate"][t],
-            cells=data["cells"],
-            mat_param=data["mat_param"]
-        )
-        graphs.append({k:v.to(device) for k,v in graph.items()})
-
     rollout_preds = []
-    load = []
-    load_rate = []
-    curr_graph = deepcopy(graphs[0]) # deep copy ensures clean start
-
+    time_dim = model.time_dim
+    curr_graph = deepcopy(data[0]) # deep copy ensures clean start
+    rollout_preds = [torch.cat([data[0].world_pos, data[0].phi], dim = -1).unsqueeze(0).to(model.device)]
     with torch.no_grad():
-        loop = tqdm(range(len(graphs)), desc="Rollout")
+        loop = tqdm(range(0, len(data), time_dim), desc="Rollout")
 
         for t in loop:
             # Replace only time-dependent fields for this step
-            curr_graph["time"] = graphs[t]["time"].clone()
-            curr_graph["swelling_phi"] = graphs[t]["swelling_phi"].clone()
-            curr_graph["swelling_phi_rate"] = graphs[t]["swelling_phi_rate"].clone()
-            # if t % 20 == 0 :
-            #     curr_graph = graphs[t]
-            load.append(curr_graph["swelling_phi"])
-            load_rate.append(curr_graph["swelling_phi_rate"])
-            # curr_graph = graphs[0]
+            curr_graph.swelling_phi = data[t].swelling_phi
+            swelling_phi = []
+            for w in range(time_dim + 1):
+                idx = t + w
+                if idx < len(data):
+                    swelling_phi.append(data[idx].swelling_phi)
+                else:
+                    # pad with zeros of the same shape
+                    swelling_phi.append(torch.zeros_like(data[0].swelling_phi))
+
+            curr_graph.swelling_phi = torch.stack(swelling_phi).T
             # Predict next state
-            pred_next = model.predict(curr_graph)
-
+            pred = model.predict(curr_graph.to(device))
+            last_step = pred[-1].clone()
             # Update for next step
-            curr_graph["world_pos"] = pred_next[0, :, :2].clone()
-            curr_graph["phi"] = pred_next[0, :, 2:].clone()
+            curr_graph.world_pos = last_step[:, :2]
+            curr_graph.phi = last_step[:, 2:]
 
-            rollout_preds.append(pred_next[0].detach().cpu())
+            rollout_preds.append(pred)
 
-        rollout_preds = torch.stack(rollout_preds, axis=0)  # [T, N, 3]
-        load = torch.stack(load, axis = 0)
-        load_rate = torch.stack(load_rate, axis = 0)
+        rollout_preds = torch.cat(rollout_preds, dim = 0)[:len(data)]
+        rollout_gts = torch.stack([torch.cat([data[t].world_pos, data[t].phi], dim = -1) for t in range(0, len(data))])
+        swelling_phi = torch.stack([data[t].swelling_phi for t in range(0, len(data))])
         # Compute error
-        gt = torch.stack([target[0].to(device) for target in data["target"]])
-        error = (rollout_preds.to(device) - gt) ** 2
+        error = (rollout_preds.to(device) - rollout_gts.to(device)) ** 2
         rmse_x = torch.sqrt(torch.mean(error[:, :, 0]))
         rmse_y = torch.sqrt(torch.mean(error[:, :, 1]))
         rmse_phi = torch.sqrt(torch.mean(error[:, :, 2]))
@@ -67,19 +47,75 @@ def rollout(model, data):
         print(f"RMSE Ux: {rmse_x:.6f}, Uy: {rmse_y:.6f}, Phi: {rmse_phi:.6f}")
 
     return {
-        "time": data["time"],
+        "time": torch.tensor([data[t]["time"] for t in range(len(data))]),
         "pred": rollout_preds,
-        "gt": gt,
-        "mesh_pos": data["mesh_pos"],
-        "cells": data["cells"],
-        "mat_param": data["mat_param"],
-        "node_type": data["node_type"],
-        "swell_phi": load,
-        "swell_phi_rate": load_rate,
+        "gt": rollout_gts,
+        "swelling_phi": swelling_phi,
+        "mat_param": data[0]["mat_param"],
+        "mesh_pos": data[0]["mesh_pos"],
+        "cells": data[0]["cells"],
+        "node_type": data[0]["node_type"],
         "rmse_x": rmse_x,
         "rmse_y": rmse_y,
         "rmse_phi": rmse_phi,
     }
+
+# def rollout(model, graphs):
+#     device = model.device
+
+#     # Split trajectory into frames
+
+#     rollout_preds = []
+#     load = []
+#     load_rate = []
+#     curr_graph = deepcopy(graphs[0]) # deep copy ensures clean start
+
+#     with torch.no_grad():
+#         loop = tqdm(range(len(graphs)), desc="Rollout")
+
+#         for t in loop:
+#             # Replace only time-dependent fields for this step
+#             curr_graph["time"] = graphs[t]["time"].clone()
+#             curr_graph["swelling_phi"] = graphs[t]["swelling_phi"].clone()
+#             # if t % 20 == 0 :
+#             #     curr_graph = graphs[t]
+#             load.append(curr_graph["swelling_phi"])
+#             # curr_graph = graphs[0]
+#             # Predict next state
+#             pred_next = model.predict(curr_graph)
+
+#             # Update for next step
+#             curr_graph["world_pos"] = pred_next[0, :, :2].clone()
+#             curr_graph["phi"] = pred_next[0, :, 2:].clone()
+
+#             rollout_preds.append(pred_next[0].detach().cpu())
+
+#         rollout_preds = torch.stack(rollout_preds, axis=0)  # [T, N, 3]
+#         load = torch.stack(load, axis = 0)
+#         load_rate = torch.stack(load_rate, axis = 0)
+#         # Compute error
+#         gt = torch.stack([target[0].to(device) for target in data["target"]])
+#         error = (rollout_preds.to(device) - gt) ** 2
+#         rmse_x = torch.sqrt(torch.mean(error[:, :, 0]))
+#         rmse_y = torch.sqrt(torch.mean(error[:, :, 1]))
+#         rmse_phi = torch.sqrt(torch.mean(error[:, :, 2]))
+
+#         print(f"RMSE Ux: {rmse_x:.6f}, Uy: {rmse_y:.6f}, Phi: {rmse_phi:.6f}")
+
+#     return {
+#         "time": data["time"],
+#         "pred": rollout_preds,
+#         "gt": gt,
+#         "mesh_pos": data["mesh_pos"],
+#         "cells": data["cells"],
+#         "mat_param": data["mat_param"],
+#         "node_type": data["node_type"],
+#         "swell_phi": load,
+#         "swell_phi_rate": load_rate,
+#         "rmse_x": rmse_x,
+#         "rmse_y": rmse_y,
+#         "rmse_phi": rmse_phi,
+#     }
 
 @torch.no_grad()
 def rollout_history(model, data) :
@@ -116,6 +152,8 @@ def rollout_history(model, data) :
             # curr_graph.swelling_phi_rate = torch.full_like(graphs[0].swelling_phi, 0.0)
             # curr_graph.swelling_phi_rate_prev = torch.full_like(graphs[0].swelling_phi, 0.0)
             pred_next = model.predict(curr_graph)
+            # curr_graph.prev_world_pos = curr_graph.world_pos.clone()
+            # curr_graph.world_pos = pred_next[:, :2].clone()
             curr_graph.prev_world_pos, curr_graph.prev_phi = curr_graph.world_pos.clone(), curr_graph.phi.clone()
             curr_graph.world_pos, curr_graph.phi = pred_next[:, :2].clone(), pred_next[:, 2:].clone()
             rollout_preds.append(pred_next)

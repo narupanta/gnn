@@ -1,8 +1,10 @@
 # training routine for the GNN model
 import torch
 import torch.optim as optim
-from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
+
+from torch_geometric.data import Data, DataLoader
+# from torch.loader import DataLoader
+# from torch.utils.data import DataLoader
 from core.datasetclass import HydrogelDataset
 from core.meshgraphnet import EncodeProcessDecodeMultiScale
 from core.rollout import rollout
@@ -55,8 +57,8 @@ if __name__ == "__main__":
         learning_rate = float(config["training"]["learning_rate"])
         weight_decay = float(config["training"].get("weight_decay", 1e-5))
         num_epochs = config["training"]["num_epochs"]
-        start_noise = config["training"].get("start_noise", 0.1)
-        end_noise = config["training"].get("end_noise", 0.01)
+        start_noise = config["training"]["start_noise_level"]
+        end_noise = config["training"]["end_noise_level"]
         with_mat_params= config["training"].get("with_mat_params", False)
         save_model_dir = config["paths"].get("save_model_dir", './trained_models')
         data_dir = config["paths"]["data_dir"]
@@ -84,32 +86,14 @@ if __name__ == "__main__":
 
     dataset = HydrogelDataset(
         data_dir=data_dir,
-        noise_level=noise_schedule(0, num_epochs, initial_noise=start_noise, final_noise=end_noise)
+        noise_level=noise_schedule(0, num_epochs, initial_noise=start_noise, final_noise=end_noise),
+        add_targets=True,
+        split_to_frames=True,
+        time_dim = time_dim
     )
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
-    rollout_dataset = HydrogelDataset(data_dir=data_dir, noise_level=0.0)
-
-    # split trajectory into frames
-    all_graphs = []
-    for data in dataloader:
-        for t in range(data.world_pos.shape[0]):
-            graph = Data(
-                world_pos=data.world_pos[t],
-                phi=data.phi[t],
-                node_type=data.node_type,
-                target=data.target[t],
-                edge_index=data.edge_index,
-                mesh_pos=data.mesh_pos,
-                time=data.time[t],
-                swelling_phi=data.swelling_phi[t],
-                swelling_phi_rate = data.swelling_phi_rate[t],
-                cells=data.cells,
-                mat_param=data.mat_param
-            )
-            all_graphs.append(graph)
-
-    train_loader = DataLoader(all_graphs, batch_size=1, shuffle=True)
     
+    rollout_dataset = HydrogelDataset(data_dir=data_dir, noise_level=0.0, time_dim = time_dim)
+   
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = EncodeProcessDecodeMultiScale(
         node_in_dim=node_in_dim,
@@ -145,29 +129,41 @@ if __name__ == "__main__":
     for train_epoch in range(num_epochs):
         model.train()
         total_loss, total_loss_ux, total_loss_uy, total_loss_phi = 0.0, 0.0, 0.0, 0.0
-        loop = tqdm(train_loader, leave=False)
-        for batch in loop:
-            batch = batch.to(device)
-            optimizer.zero_grad()
-            loss, loss_ux, loss_uy, loss_phi = model.loss(batch)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-            total_loss_ux += loss_ux.item()
-            total_loss_uy += loss_uy.item()
-            total_loss_phi += loss_phi.item()
-            loop.set_description(f"Epoch {train_epoch + 1}: ")
-            loop.set_postfix({
-                "Loss": f"{loss.item():.4f}",
-                "loss_x": f"{loss_ux.item():.4f}",
-                "loss_y": f"{loss_uy.item():.4f}",
-                "loss_phi": f"{loss_phi.item():.4f}"
-            })
+        dataset.noise_level = noise_schedule(train_epoch, num_epochs, initial_noise=start_noise, final_noise=end_noise)
+        for traj_idx, data in enumerate(dataset):
+            traj_total_loss, traj_disp_x_loss, traj_disp_y_loss, traj_pvf_loss = 0, 0, 0, 0
+            train_loader = DataLoader(data, batch_size=1, shuffle=True)
+            loop = tqdm(train_loader, leave=False)
+            for batch in loop:
+                batch = batch.to(device)
+                optimizer.zero_grad()
+                loss, loss_ux, loss_uy, loss_phi = model.loss(batch)
+                loss.backward()
+                optimizer.step()
+                traj_total_loss += loss.item()
+                traj_disp_x_loss += loss_ux.item()
+                traj_disp_y_loss += loss_uy.item()
+                traj_pvf_loss += loss_phi.item()
+                loop.set_description(f"Epoch {train_epoch + 1}, Traj {traj_idx + 1}")
+                loop.set_postfix({
+                        "Loss": f"{loss.item():.4f}",
+                        "Disp X": f"{loss_ux.item():.4f}",
+                        "Disp Y": f"{loss_uy.item():.4f}",
+                        "PVF": f"{loss_phi.item():.4f}"
+                    })
+            total_loss += traj_total_loss
+            total_loss_ux += traj_disp_x_loss
+            total_loss_uy += traj_disp_y_loss
+            total_loss_phi += traj_pvf_loss
+            logger.info(
+                f"Epoch {train_epoch + 1}, Trajectory {traj_idx + 1}: Train Loss: {traj_total_loss:.4f}, Ux Loss: {traj_disp_x_loss:.4f}, Uy Loss: {traj_disp_y_loss:.4f}, Phi Loss: {traj_pvf_loss:.4f}"
+            )
 
-        avg_loss = total_loss / len(train_loader)
-        avg_loss_ux = total_loss_ux / len(train_loader)
-        avg_loss_uy = total_loss_uy / len(train_loader)
-        avg_loss_phi = total_loss_phi / len(train_loader)
+
+        avg_loss = total_loss / len(dataset)
+        avg_loss_ux = total_loss_ux / len(dataset)
+        avg_loss_uy = total_loss_uy / len(dataset)
+        avg_loss_phi = total_loss_phi / len(dataset)
 
         # Log training loss
         logger.info(
