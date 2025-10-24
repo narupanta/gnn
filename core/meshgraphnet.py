@@ -43,7 +43,6 @@ def MLP(in_dim, out_dim, hidden_dims=(128, 128), activate_final=False, layer_nor
     if layer_norm:
         layers.append(nn.LayerNorm(out_dim))
     return nn.Sequential(*layers)
-
 class EdgeNodeMessagePassing(nn.Module):
     """
     Custom Message Passing layer using torch_scatter:
@@ -119,8 +118,72 @@ class EdgeNodeMessagePassing(nn.Module):
         new_node_feat = new_node_feat + node_feat  # residual
 
         return new_node_feat, new_edge_feat + edge_feat
+# class EdgeNodeMessagePassing(MessagePassing):
+#     """Custom MP layer that:
+#       1) updates edge attributes using (x_i, x_j, e_ij)
+#       2) computes messages using updated edge attributes and x_j
+#       3) aggregates messages and updates node attributes
 
+#     This follows the Encode-Process-Decode pattern where the processing layer is a message-passing step.
+#     """
 
+#     def __init__(self, hidden_dim, attention):
+#         super().__init__(aggr='add')  # 'add' aggregation
+#         self.attention = attention
+#         # Node attention: compute attention scores for neighbors
+#         if self.attention :
+#             self.attn_lin = torch.nn.Linear(hidden_dim, hidden_dim)
+#         # edge update: (x_i, x_j, e_ij) -> e'_ij
+#         self.edge_mlp = nn.Sequential(
+#             nn.Linear(hidden_dim * 3, hidden_dim),
+#             nn.ReLU(),
+#             nn.Linear(hidden_dim, hidden_dim),
+#             nn.ReLU(),
+#             nn.LayerNorm(hidden_dim)
+#         )
+
+#         self.node_mlp = nn.Sequential(
+#             nn.Linear(hidden_dim * 2, hidden_dim),
+#             nn.ReLU(),
+#             nn.Linear(hidden_dim, hidden_dim),
+#             nn.ReLU(),
+#             nn.LayerNorm(hidden_dim)
+#         )
+#     def forward(self, node_feat, edge_index, edge_feat):
+        
+#         # Node update
+#         new_node_features = self.propagate(edge_index, x= node_feat, edge_attr = edge_feat)        
+        
+#         # Edge update
+#         row, col = edge_index
+#         new_edge_features = self.edge_mlp(torch.cat([node_feat[row], node_feat[col], edge_feat], dim=-1))
+        
+#         # Add residuals
+#         new_node_features = new_node_features + node_feat
+#         new_edge_features = new_edge_features + edge_feat     
+                
+#         return new_node_features, new_edge_features
+    
+#     def message(self, x_i, x_j, edge_attr, index):
+#         # Compute attention score
+#         if self.attention :
+#             alpha = (self.attn_lin(x_i) * self.attn_lin(x_j)).sum(dim=-1)  # [E]
+#             alpha = F.leaky_relu(alpha)
+#             alpha = softmax(alpha, index=index)  # normalize per target node
+#             alpha = alpha.unsqueeze(-1)  # [E, 1]
+
+#             # Message is neighbor feature weighted by attention
+#             msg = alpha * self.edge_mlp(torch.cat([x_i, x_j, edge_attr], dim=-1))
+#         else :
+#             features = torch.cat([x_i, x_j, edge_attr], dim=-1)        
+#             msg = self.edge_mlp(features)
+#         return msg
+#     def update(self, aggr_out, x):
+#         # aggr_out has shape [num_nodes, out_channels]        
+#         tmp = torch.cat([aggr_out, x], dim=-1)                
+       
+#         # Step 5: Return new node embeddings.        
+#         return self.node_mlp(tmp)
 class EncodeProcessDecodeHistory(nn.Module):
     def __init__(self,
                  node_in_dim,
@@ -284,7 +347,7 @@ class EncodeProcessDecodeMultiScale(nn.Module):
                                          for _ in range(process_steps)])
         if sample_ratio > 0:
             self.coarse_edge_encoder = MLP(edge_in_dim, hidden_size, hidden_dims=(hidden_size,), layer_norm=True)
-            self.coarse_edge_features_normalizer = Normalizer(edge_in_dim, device)
+            self.coarse_edge_features_normalizer = Normalizer(1, edge_in_dim, "edge_features_normalizer", device)
             self.coarse_processors = nn.ModuleList([EdgeNodeMessagePassing(hidden_size, attention)
                                          for _ in range(coarse_process_steps)])
 
