@@ -352,7 +352,10 @@ class EncodeProcessDecodeMultiScale(nn.Module):
                                          for _ in range(coarse_process_steps)])
 
         # Decoder MLPs
-        self.node_decoder = MLP(hidden_size, node_out_dim * time_dim, hidden_dims=(hidden_size,), layer_norm=False)
+
+            self.node_decoder = MLP(2 * hidden_size, node_out_dim * time_dim, hidden_dims=(hidden_size,), layer_norm=False)
+        else :
+            self.node_decoder = MLP(hidden_size, node_out_dim * time_dim, hidden_dims=(hidden_size,), layer_norm=False)
         # self.node_decoder = nn.Sequential(
         #     nn.Conv1d(hidden_size, hidden_size//2, 1),
         #     Swish(),
