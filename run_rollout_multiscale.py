@@ -12,8 +12,8 @@ from core.rollout import rollout
 import meshio
 if __name__ == "__main__":
     # find config.yml in model directory
-    load_model_dir = "./trained_models/20251023T213503"
-    data_dir = "./dataset/bending_signal_trainset"
+    load_model_dir = "./trained_models/20251024T135915"
+    data_dir = "./dataset/bending_signal_testset"
     save_rollout_dir = "./rollouts/test"
     config_path = os.path.join(load_model_dir, 'config.yml')
     if not os.path.exists(config_path):
