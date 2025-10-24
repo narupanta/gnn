@@ -15,12 +15,14 @@ def rollout(model, data):
 
         for t in loop:
             # Replace only time-dependent fields for this step
-            curr_graph.swelling_phi = data[t].swelling_phi
+            # curr_graph.swelling_phi = data[t].swelling_phi
+            curr_graph.swelling_phi = torch.full_like(data[t].swelling_phi, 0.65)
             swelling_phi = []
             for w in range(time_dim + 1):
                 idx = t + w
                 if idx < len(data):
-                    swelling_phi.append(data[idx].swelling_phi)
+                    # swelling_phi.append(data[idx].swelling_phi)
+                    swelling_phi.append(torch.full_like(data[t].swelling_phi, 0.65))
                 else:
                     # pad with zeros of the same shape
                     swelling_phi.append(torch.zeros_like(data[0].swelling_phi))

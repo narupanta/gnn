@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<Xdmf Version="3.0">
+  <Domain>
+    <Grid GridType="Collection" CollectionType="Temporal" Name="phi">
+      <Grid Name="phi_0" GridType="Uniform">
+        <Topology NumberOfElements="1024" TopologyType="Triangle" NodesPerElement="3">
+          <DataItem Dimensions="1024 3" NumberType="UInt" Format="HDF">phi_restart.h5:phi/phi_0/mesh/topology</DataItem>
+        </Topology>
+        <Geometry GeometryType="XY">
+          <DataItem Dimensions="561 2" Format="HDF">phi_restart.h5:phi/phi_0/mesh/geometry</DataItem>
+        </Geometry>
+        <Time Value="4.250000000000000e+03" />
+        <Attribute ItemType="FiniteElementFunction" ElementFamily="CG" ElementDegree="1" ElementCell="triangle" Name="phi" Center="Other" AttributeType="Scalar">
+          <DataItem Dimensions="3072 1" NumberType="UInt" Format="HDF">phi_restart.h5:phi/phi_0/cell_dofs</DataItem>
+          <DataItem Dimensions="561 1" NumberType="Float" Format="HDF">phi_restart.h5:phi/phi_0/vector</DataItem>
+          <DataItem Dimensions="1025 1" NumberType="UInt" Format="HDF">phi_restart.h5:phi/phi_0/x_cell_dofs</DataItem>
+          <DataItem Dimensions="1024 1" NumberType="UInt" Format="HDF">phi_restart.h5:phi/phi_0/cells</DataItem>
+        </Attribute>
+      </Grid>
+    </Grid>
+  </Domain>
+</Xdmf>
