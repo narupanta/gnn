@@ -374,8 +374,8 @@ class EncodeProcessDecodeMultiScale(nn.Module):
         x_h = self.node_encoder(self.node_features_normalizer(x)).squeeze(0)
         e_h = self.edge_encoder(self.edge_features_normalizer(e)).squeeze(0)
         if self.sample_ratio > 0 :
-            ce, c_edge_index, first_indices = self._build_coarse_edge_features(batch)
-            ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce))
+            ce, c_edge_index, first_indices = self._build_coarse_edge_features(batch).unsqueeze(0)
+            ce_h = self.coarse_edge_encoder(self.coarse_edge_features_normalizer(ce)).squeeze(0)
             cx_h = x_h[first_indices]
         # Process (multiple message-passing steps)
         for i, proc in enumerate(self.processors):
