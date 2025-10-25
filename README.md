@@ -11,6 +11,7 @@ The generated groundtruth dataset is based on the analysis of **Constitutive Mod
 
 * `dataset/` – Example meshes and simulation datasets
 * `selected_model/` – trained model on uniaxial and bending cases
+* `gt_gen/` - codes for generating groundtruth
 * `core/` – The folder contains model architecture, rollout, data preprocessing and utilities codes
 * `notebooks/` – Tutorials and step-by-step implementation
 
