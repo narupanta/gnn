@@ -62,8 +62,8 @@ if __name__ == "__main__":
     
     # loop through all samples in the dataset
     for idx, data in enumerate(dataset):
-        # if idx != 1 :
-        #     continue
+        if idx != 2 :
+            continue
         sample_name = dataset.get_name(idx)
         print(f"Running rollout for sample {sample_name} ({idx+1}/{len(dataset)})")
         # input trajectory into rollout prediction
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         # save rollout predictions and error
         os.makedirs(os.path.join(save_rollout_dir, sample_name), exist_ok=True)
         np.savez_compressed(os.path.join(save_rollout_dir, sample_name, 'rollout.npz'),
-                            # time = trajectory_rollout["time"].detach().cpu().numpy(),
+                            time = trajectory_rollout["time"].detach().cpu().numpy(),
                             pred=trajectory_rollout["pred"].detach().cpu().numpy(),
                             gt=trajectory_rollout["gt"].detach().cpu().numpy(),
                             swell_phi = trajectory_rollout["swelling_phi"].detach().cpu().numpy(),
