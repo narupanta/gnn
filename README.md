@@ -14,11 +14,25 @@ The generated groundtruth dataset is based on the analysis of **Constitutive Mod
 * `core/` – The folder contains model architecture, rollout, data preprocessing and utilities codes
 * `notebooks/` – Tutorials and step-by-step implementation
 
+
+## Example of training setups
+Below picture is the example of domains and their boundary conditions. Case 1 is the case in which the hydrogel is freely deformed with the constant fluid environment $\phi_{env}$. Then, Case 2 is when hydrogel is under actuation of controlled fluid environment $\phi_{env}$. Finallt, Case 3 is when hydrogel gets exposed at the top boundary with controlled fluid environment $\phi_{env}$ which causes hydrogel to bend.
+![alt text](https://github.com/narupanta/hydrogel_gnn/blob/main/figures/domains.png)
+
 ## Example of Results
 
-![til](https://github.com/narupanta/hydrogel_gnn/blob/main/hydrogel_bend4cycles.gif)
+The result of testing the model trained using dataset 1 cycle of the periodic input signal, which its environment swelling function is defined as:
 
+$$\phi_{env}(t) = \frac{\phi_{max} + \phi_{min}}{2}+ \frac{\phi_{max} - \phi_{min}}{2}\tanh\left( A \cos\left( \frac{2\pi t}{T} \right) \right)$$
 
+against dataset of 4 cycle of the periodic input signal.
+
+![til](https://github.com/narupanta/hydrogel_gnn/blob/main/figures/hydrogel_bend4cycles.gif)
+![alt text](https://github.com/narupanta/hydrogel_gnn/blob/main/figures/overall_error.png)
+![alt text](https://github.com/narupanta/hydrogel_gnn/blob/main/figures/xy_topright_corner_timeseries.png)
+
+## Limitation
+Eventhough the model is able to capture the deformation and diffusion of the hydrogel. It is still not able to capture high speed deformation (high sharpness of the periodic function) and need high amount of data for bending cases to capture possible deformation. Apart from this, the model deteriorates after rolling out which can cause problems in a long simulation generation.
 ## Citation
 
 * J.-H. Urrea-Quintero, M. Marino, T. Wick, and U. Nackenhorst, "A Comparative Analysis of Transient Finite-Strain Coupled Diffusion-Deformation Theories for Hydrogels," *Archives of Computational Methods in Engineering*, vol. 31, pp. 3767--3800, 2024.

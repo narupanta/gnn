@@ -12,9 +12,9 @@ from core.rollout import rollout
 import meshio
 if __name__ == "__main__":
     # find config.yml in model directory
-    load_model_dir = "./trained_models/20251024T135915"
-    data_dir = "./dataset/bending_signal_testset"
-    save_rollout_dir = "./rollouts/test"
+    load_model_dir = "/mnt/c/Users/narun/Desktop/Project/hydrogel/gnn/selected_model/uniaxial_best"
+    data_dir = "./dataset/uniaxial_testset"
+    save_rollout_dir = "./rollouts/uniaxial_testset"
     config_path = os.path.join(load_model_dir, 'config.yml')
     if not os.path.exists(config_path):
         print(f"Config file not found in {load_model_dir}")
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     
     # loop through all samples in the dataset
     for idx, data in enumerate(dataset):
-        if idx != 2 :
+        if idx != 3 :
             continue
         sample_name = dataset.get_name(idx)
         print(f"Running rollout for sample {sample_name} ({idx+1}/{len(dataset)})")
