@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+
+title: >-
+  Code for the project: Surrogate Modeling of Hydrogel Diffusion-Deformation Using MeshGraphNets
+
+message: >-
+  If you use this software, please cite it using the metadata from this file.
+
+type: software
+
+authors:
+  - given-names: Narunat
+    family-names: Pantapalin
+    email: "n.pantapalin@tu-braunschweig.de"
+    affiliation: "Technische Universität Braunschweig"
+  - given-names: Jorge-Humberto
+    family-names: Urrea-Quintero
+    email: "jorge.urrea-quintero@tu-braunschweig.de"
+    affiliation: "Technische Universität Braunschweig"
+    orcid: "https://orcid.org/0000-0002-7690-4298"
+
+repository-code: "https://github.com/narupanta/hydrogel_gnn.git"
+
+abstract: >-
+  "The code provides a framework for the implementation of a data-driven surrogate model for the time-dependent, nonlinear, and coupled diffusion-deformation problem in hydrogels. We apply a Graph Neural Network (GNN) architecture, specifically the MeshGraphNets approach, to a hydrogel model. See README.md file for more information."
+
+keywords:
+  - "graph neural networks"
+  - "surrogage modeling"
+  - "hydrogels"
+  - "multiphysics"
+  
+license: GPL-3.0
